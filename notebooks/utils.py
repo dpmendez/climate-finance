@@ -3,9 +3,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
-START_DATE = "2017-10-01"
-END_DATE = "2017-12-15"
+DAMREY_START_DATE = "2017-10-01"
+DAMREY_END_DATE = "2017-12-15"
 DAMREY_DATE = datetime(2017, 11, 4)
+
+SANDY_START_DATE = "2012-10-01"
+SANDY_END_DATE = "2012-11-30"
+SANDY_DATE = datetime(2012, 10, 29)
+
 EVENT_WINDOW = 15
 
 
