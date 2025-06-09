@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from models import train_xgboost_model, train_lstm_model
-from data.abnormal_returns import compute_abnormal_returns
-from data.stock import fetch_stock_data
-from data.weather import fetch_visualcrossing_weather
+from returns import compute_abnormal_returns, estimate_market_model
+from market import fetch_market_data
+from weather import fetch_visualcrossing_weather
 from events import EVENTS
 
 
