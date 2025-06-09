@@ -1,7 +1,7 @@
 import yfinance as yf
 import pandas as pd
 
-def download_market_data(tickers, start_date, end_date):
+def fetch_market_data(tickers, start_date, end_date):
     data = {}
     for symbol, label in tickers.items():
         df = yf.download(symbol, start=start_date, end=end_date)
