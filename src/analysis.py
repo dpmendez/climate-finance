@@ -1,3 +1,13 @@
+import sys
+import os
+
+# Add the root project folder to the module path
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
+
+from config.events import EVENTS
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,7 +15,6 @@ from models import train_xgboost_model, train_lstm_model
 from returns import compute_abnormal_returns, estimate_market_model
 from market import fetch_market_data
 from weather import fetch_visualcrossing_weather
-from events import EVENTS
 
 
 def run_event_analysis(event_key, api_key):
@@ -21,8 +30,8 @@ def run_event_analysis(event_key, api_key):
     lon = event['location']['lon']
     disaster_type = event['type']
 
-    market_df = fetch_stock_data([market], start_date, end_date)[market]
-    sector_dict = fetch_stock_data(tickers, start_date, end_date)
+    market_df = fetch_market_data([market], start_date, end_date)[market]
+    sector_dict = fetch_market_data(tickers, start_date, end_date)
 
     # Define estimation window (30 days before event)
     estimation_window = market_df.index[market_df.index < event_date][-30:]
