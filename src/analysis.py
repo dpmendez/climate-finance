@@ -59,13 +59,20 @@ def run_event_analysis(event_key, api_key):
 
     for ticker in tickers:
         print(f"\n--- {ticker} ---")
-        merged_df = pd.concat([abnormal_returns[ticker], weather_df], axis=1).dropna()
-        merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
+
+        ar = abnormal_returns[ticker]
+        if isinstance(ar, pd.DataFrame):
+            ar = ar.squeeze()
+
+        merged_df = pd.concat([ar.rename('abnormal_return'), weather_df], axis=1).dropna()
+        # merged_df = pd.concat([abnormal_returns[ticker], weather_df], axis=1).dropna()
+        # merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
 
         features = weather_df.columns.tolist()
         target = 'abnormal_return'
 
-        rmse_xgb, preds_xgb = train_xgboost_model(merged_df, features, target)
+        print("Columns in merged_df:", merged_df.columns.tolist())
+        rmse_xgb, preds_xgb, _, _ = train_xgboost_model(merged_df, features, target)
         print(f"XGBoost RMSE: {rmse_xgb:.4f}")
 
         rmse_lstm, preds_lstm, test_idx, y_test = train_lstm_model(merged_df, features, target)
