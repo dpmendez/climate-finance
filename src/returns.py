@@ -1,5 +1,6 @@
 from sklearn.linear_model import LinearRegression
 import pandas as pd
+import numpy as np
 
 # Market model regression to compute normal returns 
 def estimate_market_model(market_df, sector_dict, estimation_window):
@@ -28,7 +29,7 @@ def estimate_market_model(market_df, sector_dict, estimation_window):
         y_clean = df_clean["target"]
 
         model = LinearRegression().fit(X_clean, y_clean)
-        
+
         model_params[sector] = {
             'alpha': model.intercept_,
             'beta': model.coef_[0]
