@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from models import train_xgboost_model, train_lstm_model
-from returns import compute_abnormal_returns, estimate_market_model
+from returns import compute_abnormal_returns, estimate_market_model, compute_car
 from market import fetch_market_data
 from weather import fetch_visualcrossing_weather
 
@@ -59,7 +59,7 @@ def run_event_analysis(event_key, api_key):
 
     for ticker in tickers:
         print(f"\n--- {ticker} ---")
-        merged_df = pd.concat([ar_df[[ticker]], weather_df], axis=1).dropna()
+        merged_df = pd.concat([abnormal_returns[ticker], weather_df], axis=1).dropna()
         merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
 
         features = weather_df.columns.tolist()
