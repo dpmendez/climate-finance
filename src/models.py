@@ -10,7 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 def train_xgboost_model(df, features, target):
-    df = df.dropna(subset=feature_cols + [target_col])
+    df = df.dropna(subset=features + [target])
     X = df[features].values
     y = df[target].values
 
@@ -28,7 +28,7 @@ def train_xgboost_model(df, features, target):
 
 
 def train_lstm_model(df, features, target):
-    df = df.dropna(subset=feature_cols + [target_col])
+    df = df.dropna(subset=features + [target])
     X = df[features].values
     y = df[target].values
 
