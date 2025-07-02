@@ -13,7 +13,7 @@ def fetch_market_data(tickers, start_date, end_date):
 
         if not df.empty:
             price_col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
-            df['Return'] = df[price_col].pct_change()
+            df['Return'] = df[price_col].pct_change() # NaN at the first row
 
             df = df[[price_col, 'Return', 'Volume']].rename(columns={price_col: label})
             # store processed df in the dictionary, with 'label' as the key
