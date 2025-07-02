@@ -3,6 +3,11 @@ import pandas as pd
 
 def fetch_market_data(tickers, start_date, end_date):
     data = {}
+
+    # Convert list to dict if needed (use symbol as label)
+    if isinstance(tickers, list):
+        tickers = {symbol: symbol for symbol in tickers}
+
     for symbol, label in tickers.items():
         df = yf.download(symbol, start=start_date, end=end_date)
 
