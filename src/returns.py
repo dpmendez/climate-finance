@@ -11,8 +11,24 @@ def estimate_market_model(market_df, sector_dict, estimation_window):
     model_params = {}
 
     for sector, df in sector_dict.items():
+
+        # Handle case where X is a NumPy array — convert to DataFrame
+        if isinstance(X, np.ndarray):
+            X = pd.DataFrame(X)
+
+        # Ensure y is a Series with matching length
         y = df.loc[estimation_window, 'Return'].values
-        model = LinearRegression().fit(X, y)
+        y = pd.Series(y, name="target")
+
+        # Concatenate and drop rows with NaNs
+        df_clean = pd.concat([X, y], axis=1).dropna()
+
+        # Separate features and target
+        X_clean = df_clean.drop(columns="target")
+        y_clean = df_clean["target"]
+
+        model = LinearRegression().fit(X_clean, y_clean)
+        
         model_params[sector] = {
             'alpha': model.intercept_,
             'beta': model.coef_[0]
