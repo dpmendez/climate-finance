@@ -28,7 +28,7 @@ def fetch_market_data(tickers, start_date, end_date):
             df['Return'] = df[price_col].pct_change() # NaN at the first row
 
             df = df[[price_col, 'Return', 'Volume']].rename(columns={price_col: label})
-            # store processed df in the dictionary, with 'label' as the key
-            data[label] = df
+            # store processed df in the dictionary, with 'symbol' as the key
+            data[symbol] = df
 
     return data
