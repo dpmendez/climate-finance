@@ -72,13 +72,14 @@ def run_event_analysis(event_key, api_key):
         target = 'abnormal_return'
 
         print("Columns in merged_df:", merged_df.columns.tolist())
-        rmse_xgb, preds_xgb, _, _ = train_xgboost_model(merged_df, features, target)
+        rmse_xgb, preds_xgb, test_idx_xgb, y_test_xgb = train_xgboost_model(merged_df, features, target)
         print(f"XGBoost RMSE: {rmse_xgb:.4f}")
 
-        rmse_lstm, preds_lstm, test_idx, y_test = train_lstm_model(merged_df, features, target)
+        rmse_lstm, preds_lstm, test_idx_lstm, y_test_lstm = train_lstm_model(merged_df, features, target)
         print(f"LSTM RMSE: {rmse_lstm:.4f}")
 
-        plot_predictions(test_idx, y_test, preds_lstm, preds_xgb, ticker, event_key)
+        #plot_predictions(test_idx, y_test, preds_lstm, preds_xgb, ticker, event_key)
+        plot_predictions_separately(test_idx_lstm, y_test_lstm, preds_lstm, test_idx_xgb, y_test_xgb, preds_xgb, ticker, event_key)
 
 
 def plot_predictions(index, actual, lstm_preds, xgb_preds, ticker, event_key):
@@ -92,4 +93,27 @@ def plot_predictions(index, actual, lstm_preds, xgb_preds, ticker, event_key):
     plt.legend()
     plt.tight_layout()
     plt.grid(True)
+    plt.show()
+
+
+def plot_predictions_separately(index_lstm, actual_lstm, preds_lstm,
+                                index_xgb, actual_xgb, preds_xgb,
+                                ticker, event_key):
+
+    fig, axs = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+    axs[0].plot(index_lstm, actual_lstm, label='Actual', color='black')
+    axs[0].plot(index_lstm, preds_lstm, label='LSTM', linestyle='--')
+    axs[0].set_title(f"LSTM: {ticker} ({event_key})")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    axs[1].plot(index_xgb, actual_xgb, label='Actual', color='black')
+    axs[1].plot(index_xgb, preds_xgb, label='XGBoost', linestyle=':')
+    axs[1].set_title(f"XGBoost: {ticker} ({event_key})")
+    axs[1].legend()
+    axs[1].grid(True)
+
+    plt.suptitle("Abnormal Return Predictions")
+    plt.tight_layout()
     plt.show()
