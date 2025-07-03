@@ -1,6 +1,8 @@
 from sklearn.linear_model import LinearRegression
-import pandas as pd
+import os
+import json
 import numpy as np
+import pandas as pd
 
 # Market model regression to compute normal returns 
 def estimate_market_model(market_df, sector_dict, estimation_window):
@@ -36,6 +38,15 @@ def estimate_market_model(market_df, sector_dict, estimation_window):
         }
 
     return model_params
+
+
+def save_market_model_params(params, ticker, event_key, save_dir="model_params/market"):
+
+    os.makedirs(save_dir, exist_ok=True)
+    path = os.path.join(save_dir, f"{ticker}_{event_key}_market_model.json")
+    with open(path, "w") as f:
+        json.dump(params, f, indent=2)
+
 
 # Proper method to compute abnormal returns
 def compute_abnormal_returns(market_df, sector_dict, model_params):
