@@ -28,7 +28,7 @@ def train_xgboost_model(df, features, target):
     preds = model.predict(X_test.values)
 
     rmse = np.sqrt(mean_squared_error(y_test.values, preds))
-    return rmse, preds, test_index, y_test.values
+    return rmse, preds, test_index, y_test.values, model
 
 
 def train_lstm_model(df, features, target):
@@ -67,4 +67,4 @@ def train_lstm_model(df, features, target):
 
     preds = model.predict(X_test).flatten()
     rmse = np.sqrt(mean_squared_error(y_test, preds))
-    return rmse, preds, test_index, y_test
+    return rmse, preds, test_index, y_test, model
