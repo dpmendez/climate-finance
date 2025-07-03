@@ -126,7 +126,7 @@ def plot_predictions_separately(index_lstm, actual_lstm, preds_lstm,
 
     plt.suptitle("Abnormal Return Predictions")
     plt.tight_layout()
-    plt.show()
+    #plt.show()
 
     save_path = os.path.join(save_dir, f"{ticker}_{event_key}.png")
     plt.savefig(save_path)
