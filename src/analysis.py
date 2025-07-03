@@ -8,6 +8,7 @@ if ROOT_DIR not in sys.path:
 
 from config.events import EVENTS
 
+import joblib
 import json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +17,6 @@ from market import fetch_market_data
 from models import train_xgboost_model, train_lstm_model
 from weather import fetch_visualcrossing_weather
 from returns import *
-
 
 def run_event_analysis(event_key, api_key):
     event = EVENTS[event_key]
@@ -39,7 +39,7 @@ def run_event_analysis(event_key, api_key):
 
     # Estimate market model
     model_params = estimate_market_model(market_df, sector_dict, estimation_window)
-    save_market_model_params(model_params, ticker, event_key)
+    save_market_model_params(model_params, market, event_key)
 
     # Compute AR and CAR
     abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
@@ -81,10 +81,10 @@ def run_event_analysis(event_key, api_key):
         print(f"LSTM RMSE: {rmse_lstm:.4f}")
 
         # Save XGBoost model if desired
-        xgb_model.save_model(f"model_params/xgb/{ticker}_{event_key}.json")
+        joblib.dump(xgb_model, f"models/{event_key}_{ticker}_xgb.pkl")
 
         # Save LSTM model if desired
-        lstm_model.save(f"model_params/lstm/{ticker}_{event_key}.h5")
+        model.save(f"models/{event_key}_{ticker}_lstm.keras")
 
         #plot_predictions(test_idx, y_test, preds_lstm, preds_xgb, ticker, event_key)
         plot_predictions_separately(test_idx_lstm, y_test_lstm, preds_lstm, test_idx_xgb, y_test_xgb, preds_xgb, ticker, event_key)
