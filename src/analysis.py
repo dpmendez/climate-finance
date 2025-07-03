@@ -74,17 +74,17 @@ def run_event_analysis(event_key, api_key):
         target = 'abnormal_return'
 
         print("Columns in merged_df:", merged_df.columns.tolist())
-        rmse_xgb, preds_xgb, test_idx_xgb, y_test_xgb = train_xgboost_model(merged_df, features, target)
+        rmse_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
         print(f"XGBoost RMSE: {rmse_xgb:.4f}")
 
-        rmse_lstm, preds_lstm, test_idx_lstm, y_test_lstm = train_lstm_model(merged_df, features, target)
+        rmse_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
         print(f"LSTM RMSE: {rmse_lstm:.4f}")
 
         # Save XGBoost model if desired
         joblib.dump(xgb_model, f"models/{event_key}_{ticker}_xgb.pkl")
 
         # Save LSTM model if desired
-        model.save(f"models/{event_key}_{ticker}_lstm.keras")
+        lstm_model.save(f"models/{event_key}_{ticker}_lstm.keras")
 
         #plot_predictions(test_idx, y_test, preds_lstm, preds_xgb, ticker, event_key)
         plot_predictions_separately(test_idx_lstm, y_test_lstm, preds_lstm, test_idx_xgb, y_test_xgb, preds_xgb, ticker, event_key)
