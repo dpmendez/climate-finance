@@ -8,6 +8,7 @@ if ROOT_DIR not in sys.path:
 
 from config.events import EVENTS
 
+import json
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -38,6 +39,7 @@ def run_event_analysis(event_key, api_key):
 
     # Estimate market model
     model_params = estimate_market_model(market_df, sector_dict, estimation_window)
+    save_market_model_params(model_params, ticker, event_key)
 
     # Compute AR and CAR
     abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
@@ -78,6 +80,12 @@ def run_event_analysis(event_key, api_key):
         rmse_lstm, preds_lstm, test_idx_lstm, y_test_lstm = train_lstm_model(merged_df, features, target)
         print(f"LSTM RMSE: {rmse_lstm:.4f}")
 
+        # Save XGBoost model if desired
+        xgb_model.save_model(f"model_params/xgb/{ticker}_{event_key}.json")
+
+        # Save LSTM model if desired
+        lstm_model.save(f"model_params/lstm/{ticker}_{event_key}.h5")
+
         #plot_predictions(test_idx, y_test, preds_lstm, preds_xgb, ticker, event_key)
         plot_predictions_separately(test_idx_lstm, y_test_lstm, preds_lstm, test_idx_xgb, y_test_xgb, preds_xgb, ticker, event_key)
 
@@ -98,7 +106,9 @@ def plot_predictions(index, actual, lstm_preds, xgb_preds, ticker, event_key):
 
 def plot_predictions_separately(index_lstm, actual_lstm, preds_lstm,
                                 index_xgb, actual_xgb, preds_xgb,
-                                ticker, event_key):
+                                ticker, event_key, save_dir="plots"):
+
+    os.makedirs(save_dir, exist_ok=True)
 
     fig, axs = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
 
@@ -117,3 +127,7 @@ def plot_predictions_separately(index_lstm, actual_lstm, preds_lstm,
     plt.suptitle("Abnormal Return Predictions")
     plt.tight_layout()
     plt.show()
+
+    save_path = os.path.join(save_dir, f"{ticker}_{event_key}.png")
+    plt.savefig(save_path)
+    plt.close()
