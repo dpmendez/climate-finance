@@ -9,13 +9,13 @@ if ROOT_DIR not in sys.path:
 from config.events import EVENTS
 
 import json
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from models import train_xgboost_model, train_lstm_model
-from returns import compute_abnormal_returns, estimate_market_model, compute_car
+import pandas as pd
 from market import fetch_market_data
+from models import train_xgboost_model, train_lstm_model
 from weather import fetch_visualcrossing_weather
+from returns import *
 
 
 def run_event_analysis(event_key, api_key):
