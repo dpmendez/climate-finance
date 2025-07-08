@@ -1,13 +1,5 @@
 import sys
 import os
-
-# Add the root project folder to the module path
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if ROOT_DIR not in sys.path:
-    sys.path.append(ROOT_DIR)
-
-from config.events import EVENTS
-
 import joblib
 import json
 import numpy as np
@@ -158,7 +150,7 @@ def run_cross_event_analysis(event_type, api_key):
                 merged_df = pd.concat([ar_series, weather_df], axis=1).dropna()
                 merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
 
-                features = ['temp', 'humidity', 'precip', 'windspeed', 'pressure']
+                features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
                 target = 'abnormal_return'
 
                 rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)

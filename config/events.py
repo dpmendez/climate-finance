@@ -203,3 +203,11 @@ EVENTS = {
         "regional_etfs": {}
     }
 }
+
+
+EVENT_FEATURES = {
+    "Hurricane": ['temp', 'windspeed', 'pressure', 'precip', 'humidity'],
+    "Wildfire": ['temp', 'windspeed', 'precip', 'humidity'],
+    "WinterStorm": ['temp', 'windspeed', 'precip', 'humidity', 'solarradiation'],
+    "Flood": [ 'temp', 'pressure', 'precip', 'humidity']
+}
