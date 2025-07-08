@@ -67,4 +67,9 @@ def train_lstm_model(df, features, target):
 
     preds = model.predict(X_test).flatten()
     rmse = np.sqrt(mean_squared_error(y_test, preds))
-    return rmse, preds, test_index, y_test, model
+    mae = np.mean_absolute_error(y_test, preds)
+    r2 = np.r2_score(y_test, preds)
+    mape = np.mean(np.abs((y_test - preds) / np.maximum(np.abs(y_test), 1e-8))) * 100
+    max_err = np.max_error(y_test, preds)
+
+    return rmse, mae, r2, mape, max_err, preds, test_index, y_test, model

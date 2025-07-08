@@ -12,12 +12,13 @@ import joblib
 import json
 import numpy as np
 import pandas as pd
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, max_error
 from market import fetch_market_data
 from models import train_xgboost_model, train_lstm_model
 from weather import fetch_visualcrossing_weather
 from returns import *
+from utils import save_metrics_csv
 from viz import plot_predictions_separately
-
 
 def run_event_analysis(event_key, api_key):
     event = EVENTS[event_key]
@@ -75,19 +76,28 @@ def run_event_analysis(event_key, api_key):
         target = 'abnormal_return'
 
         print("Columns in merged_df:", merged_df.columns.tolist())
-        rmse_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
-        print(f"XGBoost RMSE: {rmse_xgb:.4f}")
+        rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
+        rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm,preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
-        rmse_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
-        print(f"LSTM RMSE: {rmse_lstm:.4f}")
+        # Define metrics output path
+        metrics_path = os.path.join("results", "metrics_single.csv")
+        os.makedirs("results", exist_ok=True)
 
-        # Save XGBoost model if desired
+        # Save metrics to CSV
+        save_metrics_csv(
+            metrics_path,
+            [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}"],
+            header=["event_key", "ticker", "model", "rmse", "mae", "r2", "mape", "max_error"]
+        )
+        save_metrics_csv(
+            metrics_path,
+            [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}"]
+        )
+
+        # Save models
         joblib.dump(xgb_model, f"single_models/{event_key}_{ticker}_xgb.pkl")
-
-        # Save LSTM model if desired
         lstm_model.save(f"single_models/{event_key}_{ticker}_lstm.keras")
 
-        #plot_predictions(test_idx, y_test, preds_lstm, preds_xgb, ticker, event_key)
         plot_predictions_separately(test_idx_lstm, y_test_lstm, preds_lstm, test_idx_xgb, y_test_xgb, preds_xgb, ticker, event_key, save_dir="plots_single_event")
 
 
@@ -151,13 +161,24 @@ def run_cross_event_analysis(event_type, api_key):
                 features = ['temp', 'humidity', 'precip', 'windspeed', 'pressure']
                 target = 'abnormal_return'
 
-                rmse_xgb, preds_xgb, index_xgb, y_test_xgb = train_xgboost_model(merged_df, features, target)
-                rmse_lstm, preds_lstm, index_lstm, y_test_lstm = train_lstm_model(merged_df, features, target)
+                rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
+                rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm,preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
-                # Save XGBoost model if desired
+                metrics_path = os.path.join("results", "metrics_cross.csv")
+                os.makedirs("results", exist_ok=True)
+
+                save_metrics_csv(
+                    metrics_path,
+                    [event_type, ticker, "LSTM", f"{rmse_lstm:.4f}"],
+                    header=["event_type", "ticker", "model", "rmse", "mae", "r2", "mape", "max_error"]
+                )
+                save_metrics_csv(
+                    metrics_path,
+                    [event_type, ticker, "XGBoost", f"{rmse_xgb:.4f}"]
+                )
+
+                # Save model
                 joblib.dump(xgb_model, f"cross_models/{event_type}_{ticker}_xgb.pkl")
-
-                # Save LSTM model if desired
                 lstm_model.save(f"cross_models/{event_type}_{ticker}_lstm.keras")
 
                 plot_predictions_separately(
