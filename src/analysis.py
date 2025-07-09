@@ -1,16 +1,19 @@
-import sys
-import os
 import joblib
 import json
+import os
+import sys
 import numpy as np
 import pandas as pd
+import pickle
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, max_error
 from market import fetch_market_data
 from models import train_xgboost_model, train_lstm_model
-from weather import fetch_visualcrossing_weather
 from returns import *
 from utils import save_metrics_csv
 from viz import plot_predictions_separately
+from weather import fetch_visualcrossing_weather
+
+from config.events import EVENTS, EVENT_FEATURES
 
 def run_event_analysis(event_key, api_key):
     event = EVENTS[event_key]
@@ -87,8 +90,13 @@ def run_event_analysis(event_key, api_key):
         )
 
         # Save models
-        joblib.dump(xgb_model, f"single_models/{event_key}_{ticker}_xgb.pkl")
-        lstm_model.save(f"single_models/{event_key}_{ticker}_lstm.keras")
+        model_dir = "single_models"
+        os.makedirs(model_dir, exist_ok=True)
+        model_path = os.path.join(model_dir, f"{event_key}_{ticker}_xgb.pkl")
+        with open(model_path, "wb") as f:
+            pickle.dump(xgb_model, f)
+        model_path = os.path.join(model_dir, f"{event_key}_{ticker}_lstm.keras")
+        lstm_model.save(model_path)
 
         plot_predictions_separately(test_idx_lstm, y_test_lstm, preds_lstm, test_idx_xgb, y_test_xgb, preds_xgb, ticker, event_key, save_dir="plots_single_event")
 
@@ -169,9 +177,14 @@ def run_cross_event_analysis(event_type, api_key):
                     [event_type, ticker, "XGBoost", f"{rmse_xgb:.4f}"]
                 )
 
-                # Save model
-                joblib.dump(xgb_model, f"cross_models/{event_type}_{ticker}_xgb.pkl")
-                lstm_model.save(f"cross_models/{event_type}_{ticker}_lstm.keras")
+                # Save models
+                model_dir = "cross_models"
+                os.makedirs(model_dir, exist_ok=True)
+                model_path = os.path.join(model_dir, f"{event_type}_{ticker}_xgb.pkl")
+                with open(model_path, "wb") as f:
+                    pickle.dump(model, f)
+                model_path = os.path.join(model_dir, f"{event_type}_{ticker}_lstm.keras")
+                model.save(model_path)
 
                 plot_predictions_separately(
                     index_lstm, y_test_lstm, preds_lstm,

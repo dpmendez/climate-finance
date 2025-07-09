@@ -1,6 +1,12 @@
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import (
+    mean_squared_error,
+    mean_absolute_error,
+    r2_score,
+    mean_absolute_percentage_error,
+    max_error,
+)
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from tensorflow.keras.models import Sequential
@@ -28,7 +34,12 @@ def train_xgboost_model(df, features, target):
     preds = model.predict(X_test.values)
 
     rmse = np.sqrt(mean_squared_error(y_test.values, preds))
-    return rmse, preds, test_index, y_test.values, model
+    mae = mean_absolute_error(y_test.values, preds)
+    r2 = r2_score(y_test.values, preds)
+    mape = np.mean(np.abs((y_test.values - preds) / np.maximum(np.abs(y_test), 1e-8))) * 100
+    max_err = max_error(y_test.values, preds)
+
+    return rmse, mae, r2, mape, max_err, preds, test_index, y_test.values, model
 
 
 def train_lstm_model(df, features, target):
@@ -67,9 +78,9 @@ def train_lstm_model(df, features, target):
 
     preds = model.predict(X_test).flatten()
     rmse = np.sqrt(mean_squared_error(y_test, preds))
-    mae = np.mean_absolute_error(y_test, preds)
-    r2 = np.r2_score(y_test, preds)
+    mae = mean_absolute_error(y_test, preds)
+    r2 = r2_score(y_test, preds)
     mape = np.mean(np.abs((y_test - preds) / np.maximum(np.abs(y_test), 1e-8))) * 100
-    max_err = np.max_error(y_test, preds)
+    max_err = max_error(y_test, preds)
 
     return rmse, mae, r2, mape, max_err, preds, test_index, y_test, model
