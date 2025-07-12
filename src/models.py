@@ -23,14 +23,27 @@ def train_xgboost_model(df, features, target):
     y = df[target]
 
     # Sequential split, like in LSTM
-    train_size = int(len(df) * 0.8)
-    X_train, X_test = X.iloc[:train_size], X.iloc[train_size:]
-    y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
+    n = len(df)
+    train_end = int(n * 0.7)
+    val_end = int(n * 0.85)
+
+    X_train = X.iloc[:train_end]
+    y_train = y.iloc[:train_end]
+
+    X_val = X.iloc[train_end:val_end]
+    y_val = y.iloc[train_end:val_end]
+
+    X_test = X.iloc[val_end:]
+    y_test = y.iloc[val_end:]
     test_index = X_test.index  # preserves correct datetime index
 
     # Convert to arrays for model input
-    model = XGBRegressor(objective='reg:squarederror', n_estimators=100)
-    model.fit(X_train.values, y_train.values)
+    model = XGBRegressor(objective='reg:squarederror', n_estimators=500)
+    model.fit(X_train.values, y_train.values,
+              eval_set=[(X_val.values, y_val.values)],
+              early_stopping_rounds=10,
+              verbose=False)
+
     preds = model.predict(X_test.values)
 
     rmse = np.sqrt(mean_squared_error(y_test.values, preds))
@@ -52,7 +65,7 @@ def train_lstm_model(df, features, target):
     X_scaled = scaler.fit_transform(X) # scale so values lie between 0 and 1
 
     # Sliding window
-    window_size = 5
+    window_size = 5x
     X_seq, y_seq = [], []
     for i in range(window_size, len(X_scaled)):
         X_seq.append(X_scaled[i - window_size:i])
@@ -62,19 +75,28 @@ def train_lstm_model(df, features, target):
     y_seq = np.array(y_seq)
 
     # Split
-    train_size = int(len(X_seq) * 0.8)
-    X_train, X_test = X_seq[:train_size], X_seq[train_size:]
-    y_train, y_test = y_seq[:train_size], y_seq[train_size:]
+    n = len(X_seq)
+    train_end = int(n * 0.7)
+    val_end = int(n * 0.85)
+
+    X_train, y_train = X_seq[:train_end], y_seq[:train_end]
+    X_val, y_val = X_seq[train_end:val_end], y_seq[train_end:val_end]
+    X_test, y_test = X_seq[val_end:], y_seq[val_end:]
 
     # Index offset due to sliding window
-    test_index = df.index[window_size + train_size:]
+    test_index = df.index[window_size + val_end:]
 
     model = Sequential([
         LSTM(50, activation='relu', input_shape=(window_size, X_seq.shape[2])),
         Dense(1)
     ])
     model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
-    model.fit(X_train, y_train, epochs=20, batch_size=8, verbose=0)
+
+    history = model.fit(X_train, y_train,
+                        validation_data=(X_val, y_val),
+                        epochs=20,
+                        batch_size=8,
+                        verbose=0)
 
     preds = model.predict(X_test).flatten()
     rmse = np.sqrt(mean_squared_error(y_test, preds))
