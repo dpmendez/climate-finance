@@ -71,8 +71,8 @@ def run_event_analysis(event_key, api_key):
         target = 'abnormal_return'
 
         print("Columns in merged_df:", merged_df.columns.tolist())
-        rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
-        rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm,preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
+        rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
+        rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
         # Define metrics output path
         metrics_path = os.path.join("results", "metrics_single.csv")

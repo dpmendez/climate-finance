@@ -44,6 +44,14 @@ def train_xgboost_model(df, features, target):
               early_stopping_rounds=10,
               verbose=False)
 
+    model.fit(
+        X_train.values, y_train.values,
+        eval_set=[(X_train.values, y_train.values), (X_val.values, y_val.values)],
+        early_stopping_rounds=10,
+        evals_result=evals_result,
+        verbose=False
+    )
+    
     preds = model.predict(X_test.values)
 
     rmse = np.sqrt(mean_squared_error(y_test.values, preds))
@@ -52,7 +60,7 @@ def train_xgboost_model(df, features, target):
     mape = np.mean(np.abs((y_test.values - preds) / np.maximum(np.abs(y_test), 1e-8))) * 100
     max_err = max_error(y_test.values, preds)
 
-    return rmse, mae, r2, mape, max_err, preds, test_index, y_test.values, model
+    return rmse, mae, r2, mape, max_err, evals_result, preds, test_index, y_test.values, model
 
 
 def train_lstm_model(df, features, target):
@@ -105,4 +113,4 @@ def train_lstm_model(df, features, target):
     mape = np.mean(np.abs((y_test - preds) / np.maximum(np.abs(y_test), 1e-8))) * 100
     max_err = max_error(y_test, preds)
 
-    return rmse, mae, r2, mape, max_err, preds, test_index, y_test, model
+    return rmse, mae, r2, mape, max_err, history, preds, test_index, y_test, model
