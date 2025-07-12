@@ -10,7 +10,7 @@ from market import fetch_market_data
 from models import train_xgboost_model, train_lstm_model
 from returns import *
 from utils import save_metrics_csv
-from viz import plot_predictions_separately
+from viz import plot_predictions_separately, plot_training_history
 from weather import fetch_visualcrossing_weather
 
 from config.events import EVENTS, EVENT_FEATURES

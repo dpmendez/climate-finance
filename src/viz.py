@@ -41,3 +41,41 @@ def plot_predictions_separately(index_lstm, actual_lstm, preds_lstm,
     save_path = os.path.join(save_dir, f"{ticker}_{event_key}.png")
     plt.savefig(save_path)
     plt.close()
+
+def plot_training_history(history, model_type, ticker, event_key, save_dir="training_plots"):
+    """
+    Plot training history for LSTM or XGBoost models.
+
+    Parameters:
+    - history: dict for XGBoost (evals_result) or Keras History object for LSTM
+    - model_type: str, either 'xgboost' or 'lstm'
+    - ticker: str, ticker symbol
+    - event_key: str, climate event name
+    - save_dir: str, directory to save plot
+    """
+    os.makedirs(save_dir, exist_ok=True)
+
+    plt.figure(figsize=(10, 5))
+
+    if model_type == 'lstm':
+        plt.plot(history.history['loss'], label='Train Loss')
+        if 'val_loss' in history.history:
+            plt.plot(history.history['val_loss'], label='Validation Loss')
+    elif model_type == 'xgboost':
+        train_metric = history['validation_0']['rmse']
+        val_metric = history['validation_1']['rmse']
+        plt.plot(train_metric, label='Train RMSE')
+        plt.plot(val_metric, label='Validation RMSE')
+    else:
+        raise ValueError("model_type must be either 'lstm' or 'xgboost'")
+
+    plt.title(f"Training History ({model_type.upper()}) - {ticker} ({event_key})")
+    plt.xlabel("Epochs / Boosting Rounds")
+    plt.ylabel("Loss / RMSE")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    save_path = os.path.join(save_dir, f"{ticker}_{event_key}_{model_type}_history.png")
+    plt.savefig(save_path)
+    plt.close()
