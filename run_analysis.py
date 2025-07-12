@@ -4,7 +4,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 import argparse
 from dotenv import load_dotenv
-from analysis import run_event_analysis
+from analysis import run_event_analysis, run_cross_event_analysis
 from config.events import EVENTS
 
 def main():
