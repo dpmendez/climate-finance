@@ -161,8 +161,8 @@ def run_cross_event_analysis(event_type, api_key):
                 features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
                 target = 'abnormal_return'
 
-                rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
-                rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm,preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
+                rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
+                rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
                 metrics_path = os.path.join("results", "metrics_cross.csv")
                 os.makedirs("results", exist_ok=True)
@@ -185,6 +185,9 @@ def run_cross_event_analysis(event_type, api_key):
                     pickle.dump(model, f)
                 model_path = os.path.join(model_dir, f"{event_type}_{ticker}_lstm.keras")
                 model.save(model_path)
+
+                plot_training_history(history_xgb, "xgboost", ticker, event_type, save_dir="training_plots"):
+                plot_training_history(history_lstm, "lstm", ticker, event_type, save_dir="training_plots"):
 
                 plot_predictions_separately(
                     index_lstm, y_test_lstm, preds_lstm,
