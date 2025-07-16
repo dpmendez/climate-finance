@@ -8,7 +8,7 @@ from sklearn.metrics import (
     max_error,
 )
 from sklearn.model_selection import train_test_split
-from xgboost import XGBRegressor
+import xgboost as xgb
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.optimizers import Adam
@@ -37,27 +37,32 @@ def train_xgboost_model(df, features, target):
     y_test = y.iloc[val_end:]
     test_index = X_test.index  # preserves correct datetime index
 
-    # Convert to arrays for model input
-    model = XGBRegressor(objective='reg:squarederror', n_estimators=500)
-    model.fit(X_train.values, y_train.values,
-              eval_set=[(X_val.values, y_val.values)],
-              early_stopping_rounds=10,
-              verbose=False)
+    dtrain = xgb.DMatrix(X_train, label=y_train)
+    dval = xgb.DMatrix(X_val, label=y_val)
+    dtest = xgb.DMatrix(X_test)
 
-    model.fit(
-        X_train.values, y_train.values,
-        eval_set=[(X_train.values, y_train.values), (X_val.values, y_val.values)],
+    evals_result = {}
+    params = {
+        "objective": "reg:squarederror",
+        "eval_metric": "rmse"
+    }
+
+    model = xgb.train(
+        params,
+        dtrain,
+        num_boost_round=500,
+        evals=[(dtrain, "train"), (dval, "val")],
         early_stopping_rounds=10,
         evals_result=evals_result,
-        verbose=False
+        verbose_eval=False
     )
-    
-    preds = model.predict(X_test.values)
+
+    preds = model.predict(dtest)
 
     rmse = np.sqrt(mean_squared_error(y_test.values, preds))
     mae = mean_absolute_error(y_test.values, preds)
     r2 = r2_score(y_test.values, preds)
-    mape = np.mean(np.abs((y_test.values - preds) / np.maximum(np.abs(y_test), 1e-8))) * 100
+    mape = np.mean(np.abs((y_test.values - preds) / np.maximum(np.abs(y_test.values), 1e-8))) * 100
     max_err = max_error(y_test.values, preds)
 
     return rmse, mae, r2, mape, max_err, evals_result, preds, test_index, y_test.values, model
@@ -73,7 +78,7 @@ def train_lstm_model(df, features, target):
     X_scaled = scaler.fit_transform(X) # scale so values lie between 0 and 1
 
     # Sliding window
-    window_size = 5x
+    window_size = 5
     X_seq, y_seq = [], []
     for i in range(window_size, len(X_scaled)):
         X_seq.append(X_scaled[i - window_size:i])

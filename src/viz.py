@@ -62,8 +62,8 @@ def plot_training_history(history, model_type, ticker, event_key, save_dir="trai
         if 'val_loss' in history.history:
             plt.plot(history.history['val_loss'], label='Validation Loss')
     elif model_type == 'xgboost':
-        train_metric = history['validation_0']['rmse']
-        val_metric = history['validation_1']['rmse']
+        train_metric = history['train']['rmse']
+        val_metric = history['validation']['rmse']
         plt.plot(train_metric, label='Train RMSE')
         plt.plot(val_metric, label='Validation RMSE')
     else:
