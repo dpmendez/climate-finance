@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import pandas as pd
 import pickle
+import traceback
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, max_error
 from market import fetch_market_data
 from models import train_xgboost_model, train_lstm_model
@@ -156,6 +157,12 @@ def run_cross_event_analysis(event_type, api_key):
                     continue
 
                 merged_df = pd.concat([ar_series, weather_df], axis=1).dropna()
+
+                if 'Return' in merged_df.columns:
+                  merged_df.rename(columns={'Return': 'abnormal_return'}, inplace=True)
+                else:
+                  print(f"Skipping {ticker}: 'Return' column missing before rename.")
+                  continue
                 merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
 
                 features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
@@ -182,9 +189,9 @@ def run_cross_event_analysis(event_type, api_key):
                 os.makedirs(model_dir, exist_ok=True)
                 model_path = os.path.join(model_dir, f"{event_type}_{ticker}_xgb.pkl")
                 with open(model_path, "wb") as f:
-                    pickle.dump(model, f)
+                    pickle.dump(xgb_model, f)
                 model_path = os.path.join(model_dir, f"{event_type}_{ticker}_lstm.keras")
-                model.save(model_path)
+                lstm_model.save(model_path)
 
                 plot_training_history(history_xgb, "xgboost", ticker, event_type, save_dir="training_plots")
                 plot_training_history(history_lstm, "lstm", ticker, event_type, save_dir="training_plots")
@@ -198,6 +205,7 @@ def run_cross_event_analysis(event_type, api_key):
                 print(f"Saved predictions for {ticker} | RMSE XGB: {rmse_xgb:.4f}, LSTM: {rmse_lstm:.4f}")
             except Exception as e:
                 print(f"Error processing {ticker} for {event_type}: {e}")
+                traceback.print_exc()
                 continue
 
     print(f"\nFinished cross-event analysis for {event_type} events.\n")
