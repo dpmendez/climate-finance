@@ -197,8 +197,8 @@ def run_cross_event_analysis(event_type, api_key):
                 plot_training_history(history_lstm, "lstm", ticker, event_type, save_dir="training_plots")
 
                 plot_predictions_separately(
-                    index_lstm, y_test_lstm, preds_lstm,
-                    index_xgb, y_test_xgb, preds_xgb,
+                    test_idx_lstm, y_test_lstm, preds_lstm,
+                    test_idx_xgb, y_test_xgb, preds_xgb,
                     ticker, event_type, save_dir="plots_cross_event"
                 )
 
