@@ -198,9 +198,18 @@ EVENTS = {
         "location": {"lat": 35.2271, "lon": -80.8431},  # Charlotte, NC
         "index": "SPY",
         "sector_etfs": {
-
+            "XLE": "Energy",
+            "KIE": "Insurance",
+            "XLI": "Industrials",
+            "XLU": "Utilities",
+            "XLP": "Consumer Staples"
         },
-        "regional_etfs": {}
+        "regional_etfs": {
+            "KIE": "Insurance",
+            "IAK": "Insurance",
+            "XTN": "Transportation",
+            "KRE": "Regional Banks"
+        }
     }
 }
 
