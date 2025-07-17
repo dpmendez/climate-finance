@@ -76,18 +76,19 @@ def run_event_analysis(event_key, api_key):
         rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
         # Define metrics output path
-        metrics_path = os.path.join("results", "metrics_single.csv")
-        os.makedirs("results", exist_ok=True)
+        metrics_dir = "results"
+        os.makedirs(metrics_dir, exist_ok=True)
 
-        # Save metrics to CSV
+       # Save metrics to CSV
         save_metrics_csv(
-            metrics_path,
-            [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}"],
-            header=["event_key", "ticker", "model", "rmse", "mae", "r2", "mape", "max_error"]
+            "results/metrics_" + ticker + "_" + event_key + ".csv",
+            [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
+            header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
         )
         save_metrics_csv(
-            metrics_path,
-            [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}"]
+            "results/metrics_" + ticker + "_" + event_key + ".csv",
+            [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
+            header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
         )
 
         # Save models
@@ -171,17 +172,19 @@ def run_cross_event_analysis(event_type, api_key):
                 rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
                 rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
-                metrics_path = os.path.join("results", "metrics_cross.csv")
-                os.makedirs("results", exist_ok=True)
+                metrics_dir = "results"
+                os.makedirs(metrics_dir, exist_ok=True)
 
+                # Save metrics to CSV
                 save_metrics_csv(
-                    metrics_path,
-                    [event_type, ticker, "LSTM", f"{rmse_lstm:.4f}"],
-                    header=["event_type", "ticker", "model", "rmse", "mae", "r2", "mape", "max_error"]
+                    "results/metrics_" + ticker + "_" + event_type.lower() + ".csv",
+                    [event_type, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
+                    header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
                 )
                 save_metrics_csv(
-                    metrics_path,
-                    [event_type, ticker, "XGBoost", f"{rmse_xgb:.4f}"]
+                    "results/metrics_" + ticker + "_" + event_type.lower() + ".csv",
+                    [event_type, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
+                    header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
                 )
 
                 # Save models
