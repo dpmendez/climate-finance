@@ -2,17 +2,17 @@
 
 ## 📈 Overview
 
-This project builds a modular and extensible **event study framework** to analyze how **climate disasters** (hurricanes, wildfires, floods, winter storms, etc.) impact **financial markets**, particularly **sector-specific stock returns**. 
+This project provides a modular and extensible **event study framework** to analyze how **climate disasters** (hurricanes, wildfires, floods, winter storms, etc.) affect **financial markets**, especially sector-specific ETFs.
 
-The core objective is to **quantify and forecast abnormal stock returns in response to extreme climate events**, using historical stock and weather data, with the aid of machine learning models (XGBoost and LSTM).
+The goal is to **quantify and forecast abnormal stock returns** in response to these events using historical market and weather data, with both classical (CAPM-style) and machine learning (XGBoost and LSTM) models.
 
 ---
 
 ## 🌪️ Use Cases
 
-* Understand how different sectors react to various disaster types.
-* Forecast stock behavior using relevant weather variables.
-* Compare actual vs predicted sectoral response to extreme weather.
+* Quantify sector-specific market responses to various disaster types.
+* Forecast short-term market volatility driven by extreme weather.
+* Visualize event-driven anomalies and model accuracy across sectors.
 * Extend to future scenarios and simulate market stress testing due to climate events.
 
 ---
@@ -21,17 +21,38 @@ The core objective is to **quantify and forecast abnormal stock returns in respo
 
 ### 📂 Modules Implemented
 
-| Module                | Description                                                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `events.py`           | Contains metadata and location/date info for multiple historical disaster events. Now includes sector-specific tickers per event.     |
-| `weather.py`          | Fetches weather data from Visual Crossing API. Dynamically pulls relevant weather variables based on event type.                      |
-| `market.py`           | Fetches stock price and volume data using `yfinance`. Returns structured sector and market dataframes.                                |
-| `returns.py`          | Computes abnormal and cumulative abnormal returns (CAR). Includes both naive and regression-based computation.                        |
-| `models.py`           | Trains and evaluates XGBoost and LSTM models to forecast abnormal returns from weather data.                                          |
-| `analysis.py`         | Main pipeline: selects an event, loads data, computes abnormal returns, prepares features, and trains models. Also includes plotting. |
+| Module        | Description                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `events.py`   | Contains metadata for historical and combined disaster events. Supports flexible grouping by disaster type (e.g. all hurricanes). |
+| `weather.py`  | Fetches weather variables from Visual Crossing API based on disaster location and window. Tailors variables to event type.        |
+| `market.py`   | Downloads market and sector ETF data using `yfinance`. Cleans and aligns price data across sectors.                               |
+| `returns.py`  | Computes abnormal and cumulative abnormal returns (CAR) using either naive or regression-based approaches.                        |
+| `models.py`   | Trains and evaluates forecasting models (XGBoost, LSTM) for sectoral returns using weather as input.                              |
+| `viz.py`      | Generates visualizations of stock prices, abnormal returns, CAR, model predictions, and feature importances.                      |
+| `analysis.py` | Main orchestrator: selects events, runs data pipeline, fits models, and produces outputs for single or combined events.           |
 
 ---
 
+### 🔄 Key Enhancements (v0.2.0)
+
+#### Combined Events
+
+We can now analyze groups of events of the same type (e.g. all hurricanes) by passing a grouped key (e.g. "hurricanes") to the pipeline. This affects:
+
+* Return model computation: the regression for CAPM-style AR is trained across the full set of combined events.
+* Abnormal return calculation: AR is computed per-sector per-day across all event timelines.
+* Allows for cross-event learning and generalization.
+
+#### 📊 Visualization (new in viz.py)
+
+Centralized plotting functions include:
+
+* Stock price evolution around event windows.
+* Abnormal and cumulative abnormal returns per sector.
+* Model performance: predicted vs actual returns, RMSE, and R².
+* XGBoost feature importances for weather variables.
+* LSTM predictions and training loss curves.
+    
 ## 🔍 Abnormal Return Methodology
 
 Two methods are implemented:
@@ -52,15 +73,15 @@ CAR is calculated as the cumulative sum of daily abnormal returns.
 
 ## ⚙️ Inputs and Configuration
 
-Each event is defined by:
+Each event (or group of events) is defined by:
 
-* Name and type
-* Geolocation (`lat`, `lon`)
-* Start and end date of the analysis window
-* Sector tickers impacted
-* Weather variables relevant to disaster type (automatically selected)
+* `event_key`: string identifier (e.g. "harvey_2017", "wildfires", "hurricanes")
+* `lat, lon`: disaster center coordinates
+* `start_date`, end_date: analysis window
+* `sector_tickers`: relevant ETFs by sector
+* `weather_vars`: key weather metrics (e.g. windspeed, precip, temp)
 
-Users can select an event key (`event_key`) and run the pipeline for any disaster in `events.py`.
+Users can switch between event keys in events.py and easily extend the dataset with future disasters.
 
 ---
 
@@ -91,9 +112,27 @@ Each entry includes disaster metadata, sector tickers, and estimated losses.
 
 ---
 
+## 🚀 How to Run
+
+1. Set your Visual Crossing API key.
+2. Choose an event (event_key) or group (event_type).
+3. Run:
+
+```python
+python run_analysis.py --event_key helene_2024
+```
+
+4. Outputs include:
+* Abnormal and cumulative return plots
+* Model performance metrics
+* Saved model predictions and training logs
+
+---
+
 ## 🛠️ To Do
 
+- [X] Export event summaries as reports
 - [ ] Incorporate confidence intervals on predictions
+- [ ] Optimize model parameters
 - [ ] Build interactive dashboard using Dash or Streamlit
 - [ ] Add social/environmental impact overlays (e.g., population affected, federal relief, etc.)
-- [ ] Export event summaries as reports
