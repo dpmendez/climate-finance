@@ -215,16 +215,16 @@ EVENTS = {
 
 
 EVENT_FEATURES = {
+    "Flood": [ 'temp', 'pressure', 'precip', 'humidity'],
     "Hurricane": ['temp', 'windspeed', 'pressure', 'precip', 'humidity'],
     "Wildfire": ['temp', 'windspeed', 'precip', 'humidity'],
-    "WinterStorm": ['temp', 'windspeed', 'precip', 'humidity', 'solarradiation'],
-    "Flood": [ 'temp', 'pressure', 'precip', 'humidity']
+    "WinterStorm": ['temp', 'windspeed', 'precip', 'humidity', 'solarradiation']
 }
 
 EVENT_COLOURS = {
-    "Drought" : 'orange',
+    #"Drought" : 'orange',
+    #"HeatWave" : 'darkred',
     "Flood" : 'green',
-    "HeatWave" : 'darkred',
     "Hurricane" : 'purple',
     "Wildfire" : 'red',
     "WinterStorm" : 'blue'
