@@ -220,3 +220,12 @@ EVENT_FEATURES = {
     "WinterStorm": ['temp', 'windspeed', 'precip', 'humidity', 'solarradiation'],
     "Flood": [ 'temp', 'pressure', 'precip', 'humidity']
 }
+
+EVENT_COLOURS = {
+    "Drought" : 'orange',
+    "Flood" : 'green',
+    "HeatWave" : 'darkred',
+    "Hurricane" : 'purple',
+    "Wildfire" : 'red',
+    "WinterStorm" : 'blue'
+}
