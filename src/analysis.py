@@ -110,20 +110,22 @@ def run_cross_event_analysis(event_type, api_key):
     """
     print(f"\nRunning cross-event analysis for all {event_type} events...\n")
 
+    pooled_market_df = []
+    pooled_sector_dict = {}
+    sector_universe = set()
+
+    # Collect relevant data
     for event_key, event in EVENTS.items():
         if event['type'].lower() != event_type.lower():
             continue
 
-        print(f"\n=== {event['name']} ({event_key}) ===")
+        print(f"Pooling event: {event['name']} ({event_key})")
 
         market = event['index']
         tickers = event['sector_etfs']
         start_date = event['start_date']
         end_date = event['end_date']
         event_date = event['event_date']
-        lat = event['location']['lat']
-        lon = event['location']['lon']
-        disaster_type = event['type']
 
         try:
             market_df = fetch_market_data([market], start_date, end_date)[market]
@@ -134,8 +136,56 @@ def run_cross_event_analysis(event_type, api_key):
 
         estimation_window = market_df.index[market_df.index < event_date][-30:]
 
+        pooled_market_df.append(market_df.loc[estimation_window])
+
+        for ticker in tickers:
+            sector_universe.add(ticker)
+            if ticker not in pooled_sector_dict:
+                pooled_sector_dict[ticker] = []
+            if ticker in sector_dict:
+                pooled_sector_dict[ticker].append(sector_dict[ticker].loc[estimation_window])
+
+
+    # Concatenate pooled data
+    full_market_df = pd.concat(pooled_market_df).sort_index()
+    full_sector_dict = {
+        ticker: pd.concat(dfs).sort_index()
+        for ticker, dfs in pooled_sector_dict.items()
+    }
+
+    # Estimate one market model across all events
+    try:
+        model_params = estimate_market_model(full_market_df, full_sector_dict, estimation_window)
+        print(f"Got market model parameters for {event_type}.")
+    except Exception as e:
+        print(f"Modeling error for {event_type}.")
+        continue
+
+
+    # Second pass: run per-event modeling using shared model
+    for event_key, event in EVENTS.items():
+        if event['type'].lower() != event_type.lower():
+            continue
+
+        market = event['index']
+        tickers = event['sector_etfs']
+        start_date = event['start_date']
+        end_date = event['end_date']
+        event_date = event['event_date']
+        lat = event['location']['lat']
+        lon = event['location']['lon']
+        disaster_type = event['type']
+
+        print(f"\n=== {event['name']} ({event_key}) ===")
+
         try:
-            model_params = estimate_market_model(market_df, sector_dict, estimation_window)
+            market_df = fetch_market_data([market], start_date, end_date)[market]
+            sector_dict = fetch_market_data(tickers, start_date, end_date)
+        except Exception as e:
+            print(f"Failed to fetch market data for {event_key}: {e}")
+            continue
+
+        try:
             abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
             car = compute_car(abnormal_returns)
         except Exception as e:
@@ -162,9 +212,11 @@ def run_cross_event_analysis(event_type, api_key):
                 if 'Return' in merged_df.columns:
                   merged_df.rename(columns={'Return': 'abnormal_return'}, inplace=True)
                 else:
-                  print(f"Skipping {ticker}: 'Return' column missing before rename.")
-                  continue
-                merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
+                    merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
+
+                if 'abnormal_return' not in merged_df.columns:
+                    print(f"Skipping {ticker}: abnormal return column not found.")
+                    continue
 
                 features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
                 target = 'abnormal_return'
