@@ -75,11 +75,9 @@ def run_event_analysis(event_key, api_key):
         rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
         rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
-        # Define metrics output path
-        metrics_dir = "results"
+        # Save metrics to CSV
+        metrics_dir = "metrics/single"
         os.makedirs(metrics_dir, exist_ok=True)
-
-       # Save metrics to CSV
         save_metrics_csv(
             "results/metrics_" + ticker + "_" + event_key + ".csv",
             [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
@@ -92,7 +90,7 @@ def run_event_analysis(event_key, api_key):
         )
 
         # Save models
-        model_dir = "single_models"
+        model_dir = "models/single"
         os.makedirs(model_dir, exist_ok=True)
         model_path = os.path.join(model_dir, f"{event_key}_{ticker}_xgb.pkl")
         with open(model_path, "wb") as f:
@@ -100,7 +98,16 @@ def run_event_analysis(event_key, api_key):
         model_path = os.path.join(model_dir, f"{event_key}_{ticker}_lstm.keras")
         lstm_model.save(model_path)
 
-        plot_predictions_separately(test_idx_lstm, y_test_lstm, preds_lstm, test_idx_xgb, y_test_xgb, preds_xgb, ticker, event_key, save_dir="plots_single_event")
+        # Save training plots
+        training_dir = "plots/training/single"
+        plot_training_history(history_xgb, "xgboost", ticker, event_key, save_dir=training_dir)
+        plot_training_history(history_lstm, "lstm", ticker, event_key, save_dir=training_dir)
+
+        plot_predictions_separately(
+            test_idx_lstm, y_test_lstm, preds_lstm,
+            test_idx_xgb, y_test_xgb, preds_xgb, 
+            ticker, event_key, save_dir="plots/test/single"
+        )
 
 
 def run_cross_event_analysis(event_type, api_key):
@@ -156,6 +163,7 @@ def run_cross_event_analysis(event_type, api_key):
     # Estimate one market model across all events
     try:
         model_params = estimate_market_model(full_market_df, full_sector_dict, estimation_window)
+        save_market_model_params(model_params, market, event_type)
         print(f"Got market model parameters for {event_type}.")
     except Exception as e:
         print(f"Modeling error for {event_type}.")
@@ -190,7 +198,6 @@ def run_cross_event_analysis(event_type, api_key):
             car = compute_car(abnormal_returns)
         except Exception as e:
             print(f"Modeling error for {event_key}: {e}")
-            continue
 
         weather_df = fetch_visualcrossing_weather(api_key, lat, lon, start_date, end_date, disaster_type)
         first_sector = list(abnormal_returns.keys())[0]
@@ -224,40 +231,43 @@ def run_cross_event_analysis(event_type, api_key):
                 rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
                 rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
-                metrics_dir = "results"
-                os.makedirs(metrics_dir, exist_ok=True)
-
                 # Save metrics to CSV
+                metrics_dir = "metrics/cross"
+                os.makedirs(metrics_dir, exist_ok=True)
                 save_metrics_csv(
-                    "results/metrics_" + ticker + "_" + event_type.lower() + ".csv",
-                    [event_type, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
+                    "results/cross/metrics_" + ticker + "_" + event_type.lower() + ".csv",
+                    [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
                     header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
                 )
                 save_metrics_csv(
-                    "results/metrics_" + ticker + "_" + event_type.lower() + ".csv",
-                    [event_type, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
+                    "results/cross/metrics_" + ticker + "_" + event_type.lower() + ".csv",
+                    [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
                     header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
                 )
 
                 # Save models
-                model_dir = "cross_models"
+                model_dir = "models/cross"
                 os.makedirs(model_dir, exist_ok=True)
-                model_path = os.path.join(model_dir, f"{event_type}_{ticker}_xgb.pkl")
+                model_path = os.path.join(model_dir, f"{event_key}_{ticker}_xgb.pkl")
                 with open(model_path, "wb") as f:
                     pickle.dump(xgb_model, f)
-                model_path = os.path.join(model_dir, f"{event_type}_{ticker}_lstm.keras")
+                model_path = os.path.join(model_dir, f"{event_key}_{ticker}_lstm.keras")
                 lstm_model.save(model_path)
 
-                plot_training_history(history_xgb, "xgboost", ticker, event_type, save_dir="training_plots")
-                plot_training_history(history_lstm, "lstm", ticker, event_type, save_dir="training_plots")
+                # Save training plots
+                training_dir = "plots/training/cross"
+                os.makedirs(metrics_dir, exist_ok=True)
+                plot_training_history(history_xgb, "xgboost", ticker, event_key, save_dir=training_dir)
+                plot_training_history(history_lstm, "lstm", ticker, event_key, save_dir=training_dir)
 
                 plot_predictions_separately(
                     test_idx_lstm, y_test_lstm, preds_lstm,
                     test_idx_xgb, y_test_xgb, preds_xgb,
-                    ticker, event_type, save_dir="plots_cross_event"
+                    ticker, event_key, save_dir="plots/test/cross"
                 )
 
                 print(f"Saved predictions for {ticker} | RMSE XGB: {rmse_xgb:.4f}, LSTM: {rmse_lstm:.4f}")
+            
             except Exception as e:
                 print(f"Error processing {ticker} for {event_type}: {e}")
                 traceback.print_exc()
