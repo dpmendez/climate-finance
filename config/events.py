@@ -59,7 +59,7 @@ EVENTS = {
         "regional_etfs": {}
     },
     "wildfires_west_2020": {
-        "name": "Western U.S. Wildfires",
+        "name": "Western U.S. Wildfires 2020",
         "type": "Wildfire",
         "event_date": "2020-09-01",
         "start_date": "2020-08-15",
@@ -79,7 +79,7 @@ EVENTS = {
         }
     },
     "winter_storm_uri_2021": {
-        "name": "Texas Winter Storm (Uri)",
+        "name": "Winter Storm Uri",
         "type": "WinterStorm",
         "event_date": "2021-02-15",
         "start_date": "2021-02-01",
@@ -119,7 +119,7 @@ EVENTS = {
         }
     },
     "maui_2023": {
-        "name": "Maui Wildfires",
+        "name": "Maui Wildfires 2023",
         "type": "Wildfire",
         "event_date": "2023-08-08",
         "start_date": "2023-08-01",
@@ -153,7 +153,7 @@ EVENTS = {
         }
     },
     "louisiana_floods_2016": {
-        "name": "Louisiana Floods",
+        "name": "Louisiana Floods 2016",
         "type": "Flood",
         "event_date": "2016-08-12",
         "start_date": "2016-08-01",
@@ -172,7 +172,7 @@ EVENTS = {
         }
     },
     "kentucky_floods_2022": {
-        "name": "Eastern Kentucky Floods",
+        "name": "Kentucky Floods 2022",
         "type": "Flood",
         "event_date": "2022-07-28",
         "start_date": "2022-07-15",
