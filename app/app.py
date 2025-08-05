@@ -44,6 +44,17 @@ def layout():
 
         dbc.Row([
             dbc.Col([
+                html.Label("Select Event:"),
+                dcc.Dropdown(
+                    id='event-selector',
+                    options=[{'label': v['name'], 'value': k} for k, v in EVENTS.items()],
+                    placeholder="Choose an event"
+                )
+            ])
+        ], className="my-2"),
+
+        dbc.Row([
+            dbc.Col([
                 html.Label("Select Analysis Type:"),
                 dcc.RadioItems(
                     id='analysis-type',
@@ -54,13 +65,6 @@ def layout():
                     value='single',
                     inline=True
                 )
-            ])
-        ], className="my-2"),
-
-        dbc.Row([
-            dbc.Col([
-                html.Label(id='event-selector-label'),
-                dcc.Dropdown(id='event-selector')
             ])
         ], className="my-2"),
 
@@ -96,17 +100,6 @@ def layout():
 
 app.layout = layout
 
-@app.callback(
-    Output('event-selector-label', 'children'),
-    Output('event-selector', 'options'),
-    Input('analysis-type', 'value')
-)
-def update_event_selector(analysis_type):
-    if analysis_type == 'single':
-        return "Select Event:", [{'label': v['name'], 'value': k} for k, v in EVENTS.items()]
-    else:
-        return "Select Event Type:", [{'label': t.title(), 'value': t} for t in event_types]
-
 # Placeholder callbacks for rendering plots
 @app.callback(
     Output('ar-car-plot', 'figure'),
@@ -114,12 +107,21 @@ def update_event_selector(analysis_type):
     Input('event-selector', 'value'),
     Input('analysis-type', 'value')
 )
-def update_plots(selected, analysis_type):
+def update_plots(event_id, analysis_type):
     fig1 = go.Figure()
     fig2 = go.Figure()
-    if selected:
-        fig1.update_layout(title="AR/CAR Placeholder")
-        fig2.update_layout(title="Model Performance Placeholder")
+
+    if event_id:
+        event = EVENTS[event_id]
+        if analysis_type == 'single':
+            title = f"Single Event: {event['name']}"
+        else:
+            event_type = event['type']
+            title = f"Cross-Event Type Analysis = {event_type.title()} (Event = {event['name']})"
+
+        fig1.update_layout(title=title + "\nAR/CAR Plot")
+        fig2.update_layout(title=title + "\nModel Performance")
+
     return fig1, fig2
 
 if __name__ == '__main__':
