@@ -65,9 +65,9 @@ def run_event_analysis(event_key, api_key):
             ar = ar.squeeze()
 
         merged_df = pd.concat([ar.rename('abnormal_return'), weather_df], axis=1).dropna()
-        # merged_df = pd.concat([abnormal_returns[ticker], weather_df], axis=1).dropna()
-        # merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
-
+        merged_df.sort_index(inplace=True)
+        print(f"Merged length for {ticker}: {len(merged_df)}")
+        
         features = weather_df.columns.tolist()
         target = 'abnormal_return'
 
@@ -117,65 +117,16 @@ def run_cross_event_analysis(event_type, api_key):
     """
     print(f"\nRunning cross-event analysis for all {event_type} events...\n")
 
-    pooled_market_df = []
-    pooled_sector_dict = {}
-    sector_universe = set()
+    ar_by_event = {}  # To hold abnormal returns per event
+    weather_by_event = {}
+    tickers_set = set()
 
     # Collect relevant data
     for event_key, event in EVENTS.items():
         if event['type'].lower() != event_type.lower():
             continue
 
-        print(f"Pooling event: {event['name']} ({event_key})")
-
-        market = event['index']
-        tickers = event['sector_etfs']
-        start_date = event['start_date']
-        end_date = event['end_date']
-        event_date = event['event_date']
-
-        try:
-            market_df = fetch_market_data([market], start_date, end_date)[market]
-            sector_dict = fetch_market_data(tickers, start_date, end_date)
-        except Exception as e:
-            print(f"Failed to fetch market data for {event_key}: {e}")
-            continue
-
-        estimation_window = market_df.index[market_df.index < event_date][-30:]
-
-        pooled_market_df.append(market_df.loc[estimation_window])
-
-        for ticker in tickers:
-            sector_universe.add(ticker)
-            if ticker not in pooled_sector_dict:
-                pooled_sector_dict[ticker] = []
-            if ticker in sector_dict:
-                pooled_sector_dict[ticker].append(sector_dict[ticker].loc[estimation_window])
-
-
-    # Concatenate pooled data
-    full_market_df = pd.concat(pooled_market_df).sort_index()
-    full_sector_dict = {
-        ticker: pd.concat(dfs).sort_index()
-        for ticker, dfs in pooled_sector_dict.items()
-    }
-
-    # Estimate one market model across all events
-    try:
-        model_params = estimate_market_model(full_market_df, full_sector_dict, estimation_window)
-        save_market_model_params(model_params, market, event_type)
-        print(f"Got market model parameters for {event_type}.")
-    except Exception as e:
-        print(f"Modeling error for {event_type}.")
-        traceback.print_exc()
-        return  # STOP further execution since model_params doesn't exist
-
-
-
-    # Second pass: run per-event modeling using shared model
-    for event_key, event in EVENTS.items():
-        if event['type'].lower() != event_type.lower():
-            continue
+        print(f"Processing event: {event['name']} ({event_key})")
 
         market = event['index']
         tickers = event['sector_etfs']
@@ -186,8 +137,9 @@ def run_cross_event_analysis(event_type, api_key):
         lon = event['location']['lon']
         disaster_type = event['type']
 
-        print(f"\n=== {event['name']} ({event_key}) ===")
+        tickers_set.update(tickers)
 
+        # Get market data
         try:
             market_df = fetch_market_data([market], start_date, end_date)[market]
             sector_dict = fetch_market_data(tickers, start_date, end_date)
@@ -195,87 +147,111 @@ def run_cross_event_analysis(event_type, api_key):
             print(f"Failed to fetch market data for {event_key}: {e}")
             continue
 
+        estimation_window = market_df.index[market_df.index < event_date][-30:]
+
+        # Compute market model parameters and abnormal returns
         try:
+            model_params = estimate_market_model(market_df, sector_dict, estimation_window)
             abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
-            car = compute_car(abnormal_returns)
+            ar_by_event[event_key] = abnormal_returns
         except Exception as e:
             print(f"Modeling error for {event_key}: {e}")
             traceback.print_exc()
-            continue  # Skip this event
+            continue
 
+        # Store ARs with relative day index
+        rel_ar_dict = {}
+        for ticker, series in abnormal_returns.items():
+            relative_idx = (series.index - pd.to_datetime(event_date)).days
+            series.index = relative_idx
+            rel_ar_dict[ticker] = series
+        ar_by_event[event_key] = rel_ar_dict
 
+        # Get weather data and align to relative days
         weather_df = fetch_visualcrossing_weather(api_key, lat, lon, start_date, end_date, disaster_type)
-        first_sector = list(abnormal_returns.keys())[0]
-        common_index = abnormal_returns[first_sector].index
 
-        for df in abnormal_returns.values():
-            common_index = common_index.intersection(df.index)
-        weather_df = weather_df.reindex(common_index).ffill().bfill()
+        relative_days = (weather_df.index - pd.to_datetime(event_date)).days
+        weather_df['relative_day'] = relative_days
+        weather_df.set_index('relative_day', inplace=True)
+        weather_by_event[event_key] = weather_df
 
-        for ticker in tickers:
-            try:
-                ar_series = abnormal_returns.get(ticker)
-                if ar_series is None:
-                    print(f"Missing abnormal returns for {ticker}")
-                    continue
 
-                merged_df = pd.concat([ar_series, weather_df], axis=1).dropna()
+    # Compute average abnormal return
+    aar_dict = {}
+    for ticker in tickers_set:
+        ar_series_list = []
+        for rel_ar in ar_by_event.values():
+            if ticker in rel_ar:
+                ar_series_list.append(rel_ar[ticker])
+        if ar_series_list:
+            aar_dict[ticker] = pd.concat(ar_series_list, axis=1).mean(axis=1)
 
-                if 'Return' in merged_df.columns:
-                  merged_df.rename(columns={'Return': 'abnormal_return'}, inplace=True)
-                else:
-                    merged_df.rename(columns={ticker: 'abnormal_return'}, inplace=True)
+    # Compute comulative average abnormal return
+    caar_dict = {ticker: aar.cumsum() for ticker, aar in aar_dict.items()}
+    print(f"\nComputed average abnormal returns and CAAR for {event_type} events.\n")
 
-                if 'abnormal_return' not in merged_df.columns:
-                    print(f"Skipping {ticker}: abnormal return column not found.")
-                    continue
+    # Compute average weather
+    avg_weather_df = pd.DataFrame()
+    for event_weather in weather_by_event.values():
+        avg_weather_df = avg_weather_df.add(event_weather, fill_value=0)
+    if not weather_by_event:
+        print("No weather data to average. Exiting.")
+        return
+    avg_weather_df /= len(weather_by_event)
+    print(f"\nComputed average weather for {event_type} events.\n")
 
-                features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
-                target = 'abnormal_return'
 
-                rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
-                rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
-                # Save metrics to CSV
-                metrics_dir = "metrics/cross"
-                os.makedirs(metrics_dir, exist_ok=True)
-                save_metrics_csv(
-                    metrics_dir + "/metrics_" + ticker + "_" + event_type.lower() + ".csv",
-                    [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
-                    header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
-                )
-                save_metrics_csv(
-                    metrics_dir + "/metrics_" + ticker + "_" + event_type.lower() + ".csv",
-                    [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
-                    header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
-                )
+    for ticker, aar_series in aar_dict.items():
+        try:
+            merged_df = pd.concat([aar_series.rename('abnormal_return'), avg_weather_df], axis=1).dropna()
 
-                # Save models
-                model_dir = "models/cross"
-                os.makedirs(model_dir, exist_ok=True)
-                model_path = os.path.join(model_dir, f"{event_key}_{ticker}_xgb.pkl")
-                with open(model_path, "wb") as f:
-                    pickle.dump(xgb_model, f)
-                model_path = os.path.join(model_dir, f"{event_key}_{ticker}_lstm.keras")
-                lstm_model.save(model_path)
+            features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
+            target = 'abnormal_return'
 
-                # Save training plots
-                training_dir = "plots/training/cross"
-                os.makedirs(metrics_dir, exist_ok=True)
-                plot_training_history(history_xgb, "xgboost", ticker, event_key, save_dir=training_dir)
-                plot_training_history(history_lstm, "lstm", ticker, event_key, save_dir=training_dir)
+            rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
+            rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
 
-                plot_predictions_separately(
-                    test_idx_lstm, y_test_lstm, preds_lstm,
-                    test_idx_xgb, y_test_xgb, preds_xgb,
-                    ticker, event_key, save_dir="plots/test/cross"
-                )
+            # Save metrics to CSV
+            metrics_dir = "metrics/cross"
+            os.makedirs(metrics_dir, exist_ok=True)
+            save_metrics_csv(
+                metrics_dir + "/metrics_" + ticker + "_" + event_type.lower() + ".csv",
+                [event_type, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
+                header=["event_type", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
+            )
+            save_metrics_csv(
+                metrics_dir + "/metrics_" + ticker + "_" + event_type.lower() + ".csv",
+                [event_type, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
+                header=["event_type", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
+            )
 
-                print(f"Saved predictions for {ticker} | RMSE XGB: {rmse_xgb:.4f}, LSTM: {rmse_lstm:.4f}")
+            # Save models
+            model_dir = "models/cross"
+            os.makedirs(model_dir, exist_ok=True)
+            model_path = os.path.join(model_dir, f"{event_key}_{ticker}_xgb.pkl")
+            with open(model_path, "wb") as f:
+                pickle.dump(xgb_model, f)
+            model_path = os.path.join(model_dir, f"{event_key}_{ticker}_lstm.keras")
+            lstm_model.save(model_path)
+
+            # Save training plots
+            training_dir = "plots/training/cross"
+            os.makedirs(training_dir, exist_ok=True)
+            plot_training_history(history_xgb, "xgboost", ticker, event_key, save_dir=training_dir)
+            plot_training_history(history_lstm, "lstm", ticker, event_key, save_dir=training_dir)
+
+            plot_predictions_separately(
+                test_idx_lstm, y_test_lstm, preds_lstm,
+                test_idx_xgb, y_test_xgb, preds_xgb,
+                ticker, event_key, save_dir="plots/test/cross"
+            )
+
+            print(f"Saved predictions for {ticker} | RMSE XGB: {rmse_xgb:.4f}, LSTM: {rmse_lstm:.4f}")
             
-            except Exception as e:
-                print(f"Error processing {ticker} for {event_type}: {e}")
-                traceback.print_exc()
-                continue
+        except Exception as e:
+            print(f"Error processing {ticker} for {event_type}: {e}")
+            traceback.print_exc()
+            continue
 
     print(f"\nFinished cross-event analysis for {event_type} events.\n")
