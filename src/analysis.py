@@ -79,12 +79,12 @@ def run_event_analysis(event_key, api_key):
         metrics_dir = "metrics/single"
         os.makedirs(metrics_dir, exist_ok=True)
         save_metrics_csv(
-            "results/metrics_" + ticker + "_" + event_key + ".csv",
+            metrics_dir + "/metrics_" + ticker + "_" + event_key + ".csv",
             [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
             header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
         )
         save_metrics_csv(
-            "results/metrics_" + ticker + "_" + event_key + ".csv",
+            metrics_dir + "/metrics_" + ticker + "_" + event_key + ".csv",
             [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
             header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
         )
@@ -167,7 +167,9 @@ def run_cross_event_analysis(event_type, api_key):
         print(f"Got market model parameters for {event_type}.")
     except Exception as e:
         print(f"Modeling error for {event_type}.")
-        continue
+        traceback.print_exc()
+        return  # STOP further execution since model_params doesn't exist
+
 
 
     # Second pass: run per-event modeling using shared model
@@ -198,6 +200,9 @@ def run_cross_event_analysis(event_type, api_key):
             car = compute_car(abnormal_returns)
         except Exception as e:
             print(f"Modeling error for {event_key}: {e}")
+            traceback.print_exc()
+            continue  # Skip this event
+
 
         weather_df = fetch_visualcrossing_weather(api_key, lat, lon, start_date, end_date, disaster_type)
         first_sector = list(abnormal_returns.keys())[0]
@@ -235,12 +240,12 @@ def run_cross_event_analysis(event_type, api_key):
                 metrics_dir = "metrics/cross"
                 os.makedirs(metrics_dir, exist_ok=True)
                 save_metrics_csv(
-                    "results/cross/metrics_" + ticker + "_" + event_type.lower() + ".csv",
+                    metrics_dir + "/metrics_" + ticker + "_" + event_type.lower() + ".csv",
                     [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
                     header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
                 )
                 save_metrics_csv(
-                    "results/cross/metrics_" + ticker + "_" + event_type.lower() + ".csv",
+                    metrics_dir + "/metrics_" + ticker + "_" + event_type.lower() + ".csv",
                     [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
                     header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
                 )
