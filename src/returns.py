@@ -40,10 +40,10 @@ def estimate_market_model(market_df, sector_dict, estimation_window):
     return model_params
 
 
-def save_market_model_params(params, ticker, event_key, save_dir="model_params/market"):
+def save_market_model_params(params, event_key, save_dir="models"):
 
     os.makedirs(save_dir, exist_ok=True)
-    path = os.path.join(save_dir, f"{ticker}_{event_key}_market_model.json")
+    path = os.path.join(save_dir, f"{event_key}_market_lr.json")
     with open(path, "w") as f:
         json.dump(params, f, indent=2)
 

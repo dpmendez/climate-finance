@@ -37,7 +37,7 @@ def run_event_analysis(event_key, api_key):
 
     # Estimate market model
     model_params = estimate_market_model(market_df, sector_dict, estimation_window)
-    save_market_model_params(model_params, market, event_key)
+    save_market_model_params(model_params, event_key, 'models/single')
 
     # Compute AR and CAR
     abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
@@ -67,7 +67,7 @@ def run_event_analysis(event_key, api_key):
         merged_df = pd.concat([ar.rename('abnormal_return'), weather_df], axis=1).dropna()
         merged_df.sort_index(inplace=True)
         print(f"Merged length for {ticker}: {len(merged_df)}")
-        
+
         features = weather_df.columns.tolist()
         target = 'abnormal_return'
 
@@ -152,6 +152,7 @@ def run_cross_event_analysis(event_type, api_key):
         # Compute market model parameters and abnormal returns
         try:
             model_params = estimate_market_model(market_df, sector_dict, estimation_window)
+            save_market_model_params(model_params, event_type, 'models/cross')
             abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
             ar_by_event[event_key] = abnormal_returns
         except Exception as e:
@@ -201,7 +202,6 @@ def run_cross_event_analysis(event_type, api_key):
     print(f"\nComputed average weather for {event_type} events.\n")
 
 
-
     for ticker, aar_series in aar_dict.items():
         try:
             merged_df = pd.concat([aar_series.rename('abnormal_return'), avg_weather_df], axis=1).dropna()
@@ -229,22 +229,22 @@ def run_cross_event_analysis(event_type, api_key):
             # Save models
             model_dir = "models/cross"
             os.makedirs(model_dir, exist_ok=True)
-            model_path = os.path.join(model_dir, f"{event_key}_{ticker}_xgb.pkl")
+            model_path = os.path.join(model_dir, f"{event_type}_{ticker}_xgb.pkl")
             with open(model_path, "wb") as f:
                 pickle.dump(xgb_model, f)
-            model_path = os.path.join(model_dir, f"{event_key}_{ticker}_lstm.keras")
+            model_path = os.path.join(model_dir, f"{event_type}_{ticker}_lstm.keras")
             lstm_model.save(model_path)
 
             # Save training plots
             training_dir = "plots/training/cross"
             os.makedirs(training_dir, exist_ok=True)
-            plot_training_history(history_xgb, "xgboost", ticker, event_key, save_dir=training_dir)
-            plot_training_history(history_lstm, "lstm", ticker, event_key, save_dir=training_dir)
+            plot_training_history(history_xgb, "xgboost", ticker, event_type, save_dir=training_dir)
+            plot_training_history(history_lstm, "lstm", ticker, event_type, save_dir=training_dir)
 
             plot_predictions_separately(
                 test_idx_lstm, y_test_lstm, preds_lstm,
                 test_idx_xgb, y_test_xgb, preds_xgb,
-                ticker, event_key, save_dir="plots/test/cross"
+                ticker, event_type, save_dir="plots/test/cross"
             )
 
             print(f"Saved predictions for {ticker} | RMSE XGB: {rmse_xgb:.4f}, LSTM: {rmse_lstm:.4f}")
