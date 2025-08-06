@@ -103,6 +103,24 @@ def run_event_analysis(event_key, api_key):
         plot_training_history(history_xgb, "xgboost", ticker, event_key, save_dir=training_dir)
         plot_training_history(history_lstm, "lstm", ticker, event_key, save_dir=training_dir)
 
+        # Save truth and predictions
+        car_true_lstm, car_pred_lstm = np.cumsum(y_test_lstm), np.cumsum(preds_lstm)
+        car_true_xgb, car_pred_xgb = np.cumsum(y_test_xgb), np.cumsum(preds_xgb)
+        results_lstm_df = pd.DataFrame({
+            'ar_true' : y_test_lstm,
+            'ar_pred' : preds_lstm,
+            'car_true' : caar_true_lstm,
+            'car_pred' : caar_pred_lstm
+            }, index=test_idx_lstm)
+        results_xgb_df = pd.DataFrame({
+            'ar_true' : y_test_xgb,
+            'ar_pred' : preds_xgb,
+            'car_true' : caar_true_xgb,
+            'car_pred' : caar_pred_xgb
+            }, index=test_idx_xgb)
+        results_lstm_df.to_csv(f"{training_dir}/{ticker}_{event_key}_lstm_ar_car.csv")
+        results_xgb_df.to_csv(f"{training_dir}/{ticker}_{event_key}_xgb_ar_car.csv")
+
         plot_predictions_separately(
             test_idx_lstm, y_test_lstm, preds_lstm,
             test_idx_xgb, y_test_xgb, preds_xgb, 
@@ -240,6 +258,25 @@ def run_cross_event_analysis(event_type, api_key):
             os.makedirs(training_dir, exist_ok=True)
             plot_training_history(history_xgb, "xgboost", ticker, event_type, save_dir=training_dir)
             plot_training_history(history_lstm, "lstm", ticker, event_type, save_dir=training_dir)
+
+            # Save truth and predictions
+            # These are averages (aar and caar) but we need to standardize the naming for the pipeline
+            car_true_lstm, car_pred_lstm = np.cumsum(y_test_lstm), np.cumsum(preds_lstm)
+            car_true_xgb, car_pred_xgb = np.cumsum(y_test_xgb), np.cumsum(preds_xgb)
+            results_lstm_df = pd.DataFrame({
+                'ar_true' : y_test_lstm,
+                'ar_pred' : preds_lstm,
+                'car_true' : car_true_lstm,
+                'car_pred' : car_pred_lstm
+                }, index=test_idx_lstm)
+            results_xgb_df = pd.DataFrame({
+                'ar_true' : y_test_xgb,
+                'ar_pred' : preds_xgb,
+                'car_true' : car_true_xgb,
+                'car_pred' : car_pred_xgb
+                }, index=test_idx_xgb)
+            results_lstm_df.to_csv(f"{training_dir}/{ticker}_{event_type}_lstm_ar_car.csv")
+            results_xgb_df.to_csv(f"{training_dir}/{ticker}_{event_type}_xgb_ar_car.csv")
 
             plot_predictions_separately(
                 test_idx_lstm, y_test_lstm, preds_lstm,
