@@ -107,22 +107,20 @@ app.layout = layout
     Input('event-selector', 'value'),
     Input('analysis-type', 'value')
 )
-def update_plots(event_id, analysis_type):
+def update_plots(event_key, analysis_type):
     fig1 = go.Figure()
     fig2 = go.Figure()
-
-    if event_id:
-        event = EVENTS[event_id]
+    if event_key:
+        event = EVENTS.get(event_key)
+        event_name = event['name']
+        event_type = event['type']
         if analysis_type == 'single':
-            title = f"Single Event: {event['name']}"
-        else:
-            event_type = event['type']
-            title = f"Cross-Event Type Analysis = {event_type.title()} (Event = {event['name']})"
-
-        fig1.update_layout(title=title + "\nAR/CAR Plot")
-        fig2.update_layout(title=title + "\nModel Performance")
-
+            fig1.update_layout(title=f"AR/CAR for '{event_name}'")
+            fig2.update_layout(title="Model Performance (Single Event)")
+        elif analysis_type == 'cross':
+            fig1.update_layout(title=f"AR/CAR for all '{event_type}' events")
+            fig2.update_layout(title="Model Performance (Cross-Event)")
     return fig1, fig2
 
 if __name__ == '__main__':
-    app.run(debug=True,port=8050)
+    app.run(debug=True,port=8052)
