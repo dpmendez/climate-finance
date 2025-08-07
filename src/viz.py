@@ -1,18 +1,23 @@
 import os
 import matplotlib.pyplot as plt
 
-def plot_predictions(index, actual, lstm_preds, xgb_preds, ticker, event_key):
+def plot_predictions(index, y_true, y_preds, model_key,
+                     ticker, event_key, save_dir="plots"):
+
     plt.figure(figsize=(12, 6))
-    plt.plot(index, actual, label='Actual', color='black')
-    plt.plot(index, lstm_preds, label='LSTM', linestyle='--')
-    plt.plot(index, xgb_preds, label='XGBoost', linestyle=':')
+    plt.plot(index, y_true, label='Actual', color='black')
+    plt.plot(index, y_preds, label={model_key}, linestyle=':')
     plt.title(f"Predicted vs Actual Abnormal Returns: {ticker} ({event_key})")
     plt.xlabel("Date")
     plt.ylabel("Abnormal Return")
     plt.legend()
     plt.tight_layout()
     plt.grid(True)
-    plt.show()
+    #plt.show()
+    
+    save_path = os.path.join(save_dir, f"{ticker}_{event_key}_{model_key}.png")
+    plt.savefig(save_path)
+    plt.close()
 
 def plot_predictions_separately(index_lstm, actual_lstm, preds_lstm,
                                 index_xgb, actual_xgb, preds_xgb,
