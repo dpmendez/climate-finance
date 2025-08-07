@@ -224,6 +224,11 @@ def run_cross_event_analysis(event_type, api_key):
         try:
             merged_df = pd.concat([aar_series.rename('abnormal_return'), avg_weather_df], axis=1).dropna()
 
+            # Save merged data for tabular regression
+            tabular_data_dir = f"../data/aar_weather_dfs/{event_type}"
+            os.makedirs(tabular_data_dir, exist_ok=True)
+            merged_df.to_csv(os.path.join(tabular_data_dir, f"{ticker}_aar_weather.csv"))
+
             features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
             target = 'abnormal_return'
 
