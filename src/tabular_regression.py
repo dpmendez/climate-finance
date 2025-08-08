@@ -3,10 +3,14 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config')))
 
 import argparse
+import numpy as np
 import pandas as pd
+import pickle
 from models import train_xgboost_model
 from config.events import EVENTS, EVENT_FEATURES
+from utils import save_metrics_csv
 from viz import plot_training_history, plot_predictions
+
 
 def run_tabular_regression(data_dir, event_type, features=["temperature"], target="abnormal_return"):
     """
@@ -37,11 +41,45 @@ def run_tabular_regression(data_dir, event_type, features=["temperature"], targe
                 "R2": r2,
             }
 
-            output_dir = "plots/training/tabular"
-            os.makedirs(output_dir, exist_ok=True)
+            # === Directories ===
+            metrics_dir = "metrics/tabular"
+            model_dir   = "models/tabular"
+            training_dir = "plots/training/tabular"
+            os.makedirs(metrics_dir, exist_ok=True)
+            os.makedirs(model_dir, exist_ok=True)
+            os.makedirs(training_dir, exist_ok=True)
 
             plot_training_history(history, "xgboost", ticker, event_type, save_dir=output_dir)
             plot_predictions(idx, y_true, y_pred, "xgboost", ticker, event_type, save_dir=output_dir)
+
+            # === Save metrics ===
+            metrics_path = os.path.join(metrics_dir, f"metrics_{ticker}_{event_type.lower()}.csv")
+            save_metrics_csv(
+                metrics_path,
+                [event_type, ticker, "XGBoost", f"{rmse:.4f}", f"{mae:.4f}", f"{r2:.4f}", f"{mape:.4f}", f"{max_err:.4f}"],
+                header=["event_type", "ticker", "model", "rmse", "mae", "r2", "mape", "max_err"]
+            )
+
+            # === Save model ===
+            model_path = os.path.join(model_dir, f"{event_type}_{ticker}_xgb.pkl")
+            with open(model_path, "wb") as f:
+                pickle.dump(model, f)
+
+            # === Save training plots ===
+            plot_training_history(history, "xgboost", ticker, event_type, save_dir=training_dir)
+            plot_predictions(idx, y_true, y_pred, "xgboost", ticker, event_type, save_dir=training_dir)
+
+            # === Save AAR & CAAR truth vs pred ===
+            car_true = np.cumsum(y_true)
+            car_pred = np.cumsum(y_pred)
+            results_df = pd.DataFrame({
+                'ar_true' : y_true,
+                'ar_pred' : y_pred,
+                'car_true': car_true,
+                'car_pred': car_pred,
+            }, index=idx)
+
+            results_df.to_csv(f"{training_dir}/{ticker}_{event_type}_xgb_ar_car.csv")
 
         except Exception as e:
             print(f"Failed to run model for {ticker}: {e}")
