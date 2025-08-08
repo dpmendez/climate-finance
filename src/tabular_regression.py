@@ -1,13 +1,15 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config')))
-
 import argparse
+import pickle
 import numpy as np
 import pandas as pd
-import pickle
-from models import train_xgboost_model
+
+# Add config directory to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from config.events import EVENTS, EVENT_FEATURES
+from models import train_xgboost_model
 from utils import save_metrics_csv
 from viz import plot_training_history, plot_predictions
 
@@ -35,11 +37,7 @@ def run_tabular_regression(data_dir, event_type, features=["temperature"], targe
 
         try:
             rmse, mae, r2, mape, max_err, history, y_pred, idx, y_true, model  = train_xgboost_model(df, features, target)
-            all_results[ticker] = {
-                "RMSE": rmse,
-                "MAE": mae,
-                "R2": r2,
-            }
+            all_results[ticker] = {"RMSE": rmse, "MAE": mae, "R2": r2}
 
             # === Directories ===
             metrics_dir = "metrics/tabular"
@@ -48,9 +46,6 @@ def run_tabular_regression(data_dir, event_type, features=["temperature"], targe
             os.makedirs(metrics_dir, exist_ok=True)
             os.makedirs(model_dir, exist_ok=True)
             os.makedirs(training_dir, exist_ok=True)
-
-            plot_training_history(history, "xgboost", ticker, event_type, save_dir=output_dir)
-            plot_predictions(idx, y_true, y_pred, "xgboost", ticker, event_type, save_dir=output_dir)
 
             # === Save metrics ===
             metrics_path = os.path.join(metrics_dir, f"metrics_{ticker}_{event_type.lower()}.csv")
@@ -98,9 +93,12 @@ if __name__ == "__main__":
                         help='ML model to use (e.g., xgboost, linear, random_forest).')
 
     args = parser.parse_args()
-
     event_type  = args.event_type
-    data_folder = f"data/aar_weather_dfs/{event_type}"
+
+    if event_type not in EVENT_FEATURES:
+        raise ValueError(f"Unknown event type: {event_type}. Valid options: {list(EVENT_FEATURES.keys())}")
+
+    data_folder = f"../data/aar_weather_dfs/{event_type}"
     features    = EVENT_FEATURES.get(event_type, ['temperature'])
     target      = "abnormal_return"
 
