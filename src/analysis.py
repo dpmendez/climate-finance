@@ -109,14 +109,14 @@ def run_event_analysis(event_key, api_key):
         results_lstm_df = pd.DataFrame({
             'ar_true' : y_test_lstm,
             'ar_pred' : preds_lstm,
-            'car_true' : caar_true_lstm,
-            'car_pred' : caar_pred_lstm
+            'car_true' : car_true_lstm,
+            'car_pred' : car_pred_lstm
             }, index=test_idx_lstm)
         results_xgb_df = pd.DataFrame({
             'ar_true' : y_test_xgb,
             'ar_pred' : preds_xgb,
-            'car_true' : caar_true_xgb,
-            'car_pred' : caar_pred_xgb
+            'car_true' : car_true_xgb,
+            'car_pred' : car_pred_xgb
             }, index=test_idx_xgb)
         results_lstm_df.to_csv(f"{training_dir}/{ticker}_{event_key}_lstm_ar_car.csv")
         results_xgb_df.to_csv(f"{training_dir}/{ticker}_{event_key}_xgb_ar_car.csv")

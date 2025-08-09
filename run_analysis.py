@@ -5,7 +5,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 import argparse
 from dotenv import load_dotenv
 from analysis import run_event_analysis, run_cross_event_analysis
-from config.events import EVENTS
+from config.events import EVENTS, EVENT_FEATURES
 
 def main():
 
@@ -17,7 +17,6 @@ def main():
         raise ValueError("API key not found. Please set VISUAL_CROSSING_API_KEY in your .env file.")
 
     # Command-line argument for event selection
-    # Command-line arguments
     parser = argparse.ArgumentParser(description="Run climate-financial event analysis.")
     parser.add_argument('--mode', type=str, default='single', choices=['single', 'cross'],
                         help='Type of analysis to run: single event or cross-event.')

@@ -43,9 +43,11 @@ def run_tabular_regression(data_dir, event_type, features=["temperature"], targe
             metrics_dir = "metrics/tabular"
             model_dir   = "models/tabular"
             training_dir = "plots/training/tabular"
+            test_dir     = "plots/test/tabular"
             os.makedirs(metrics_dir, exist_ok=True)
             os.makedirs(model_dir, exist_ok=True)
             os.makedirs(training_dir, exist_ok=True)
+            os.makedirs(test_dir, exist_ok=True)
 
             # === Save metrics ===
             metrics_path = os.path.join(metrics_dir, f"metrics_{ticker}_{event_type.lower()}.csv")
@@ -62,7 +64,7 @@ def run_tabular_regression(data_dir, event_type, features=["temperature"], targe
 
             # === Save training plots ===
             plot_training_history(history, "xgboost", ticker, event_type, save_dir=training_dir)
-            plot_predictions(idx, y_true, y_pred, "xgboost", ticker, event_type, save_dir=training_dir)
+            plot_predictions(idx, y_true, y_pred, "xgboost", ticker, event_type, save_dir=test_dir)
 
             # === Save AAR & CAAR truth vs pred ===
             car_true = np.cumsum(y_true)
@@ -98,11 +100,13 @@ if __name__ == "__main__":
     if event_type not in EVENT_FEATURES:
         raise ValueError(f"Unknown event type: {event_type}. Valid options: {list(EVENT_FEATURES.keys())}")
 
-    data_folder = f"../data/aar_weather_dfs/{event_type}"
+    data_dir = f"../data/aar_weather_dfs/{event_type}"
+    os.makedirs(data_dir, exist_ok=True)
+
     features    = EVENT_FEATURES.get(event_type, ['temperature'])
     target      = "abnormal_return"
 
-    results = run_tabular_regression(data_folder, event_type, features, target)
+    results = run_tabular_regression(data_dir, event_type, features, target)
 
     print("\nSummary of results:")
     for ticker, metrics in results.items():
