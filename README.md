@@ -2,18 +2,20 @@
 
 ## 📈 Overview
 
-This project provides a modular and extensible **event study framework** to analyze how **climate disasters** (hurricanes, wildfires, floods, winter storms, etc.) affect **financial markets**, especially sector-specific ETFs.
+This project provides a modular and extensible **event study** framework to analyze how **climate disasters** (hurricanes, wildfires, floods, winter storms, etc.) affect **financial markets**, especially sector-specific ETFs.
 
-The goal is to **quantify and forecast abnormal stock returns** in response to these events using historical market and weather data, with both classical (CAPM-style) and machine learning (XGBoost and LSTM) models.
+The initial goal was to **quantify and forecast abnormal stock returns** in response to these events using historical market and weather data, with both classical (CAPM-style) and machine learning (XGBoost and LSTM) models.
+
+In this branch, the codebase has been **refactored for better structure, output organization, and preparation for a new modeling approach** (tabular regression). While the current event study implementation works, it produces **small test datasets** for some events due to limited aligned weather–market data, which restricts predictive insight.
 
 ---
 
-## 🌪️ Use Cases
+## 🌪️ Use Cases (Current)
 
 * Quantify sector-specific market responses to various disaster types.
-* Forecast short-term market volatility driven by extreme weather.
-* Visualize event-driven anomalies and model accuracy across sectors.
-* Extend to future scenarios and simulate market stress testing due to climate events.
+* Save and organize model outputs, metrics, and plots into consistent directories.
+* Run a **tabular regression** task that consolidates all event-day feature sets into one dataset for regression analysis.
+* Maintain reproducible pipelines for both single-event and grouped-event studies.
 
 ---
 
@@ -30,85 +32,38 @@ The goal is to **quantify and forecast abnormal stock returns** in response to t
 | `models.py`   | Trains and evaluates forecasting models (XGBoost, LSTM) for sectoral returns using weather as input.                              |
 | `viz.py`      | Generates visualizations of stock prices, abnormal returns, CAR, model predictions, and feature importances.                      |
 | `analysis.py` | Main orchestrator: selects events, runs data pipeline, fits models, and produces outputs for single or combined events.           |
+| `tabular_regression.py` |	**New** — builds a unified dataset of weather + market features across events for regression modeling.                  |
 
 ---
 
-### 🔄 Key Enhancements (v0.2.0)
+### 📂 Output Organization **(new)**
 
-#### Combined Events
+Outputs are now saved in dedicated folders with .gitkeep placeholders to keep structure without tracking generated files:
 
-We can now analyze groups of events of the same type (e.g. all hurricanes) by passing a grouped key (e.g. "hurricanes") to the pipeline. This affects:
+data/       # Raw and processed datasets
+metrics/    # Model evaluation metrics
+models/     # Saved trained models
+plots/      # Generated plots
 
-* Return model computation: the regression for CAPM-style AR is trained across the full set of combined events.
-* Abnormal return calculation: AR is computed per-sector per-day across all event timelines.
-* Allows for cross-event learning and generalization.
+These folders are tracked empty in Git via .gitkeep and excluded from committing generated files with .gitignore.
 
-#### 📊 Visualization (new in viz.py)
+---
+### 🔄 Key changes in this branch
 
-Centralized plotting functions include:
-
-* Stock price evolution around event windows.
-* Abnormal and cumulative abnormal returns per sector.
-* Model performance: predicted vs actual returns, RMSE, and R².
-* XGBoost feature importances for weather variables.
-* LSTM predictions and training loss curves.
-    
-## 🔍 Abnormal Return Methodology
-
-Two methods are implemented:
-
-* **Naive approach**:
-
-  $$\text{Abnormal Return} = R_t - \overline{R}$$
-
-* **Market-adjusted (CAPM-style) approach**:
-
-  $$\text{AR}_ {\text{sector}} = R_{\text{sector}} - (\alpha + \beta \cdot R_{\text{market}})$$
-
-where $\alpha$, $\beta$ are learned from OLS regression during the estimation window.
-
-CAR is calculated as the cumulative sum of daily abnormal returns.
+* Introduced tabular regression pipeline for multi-event, cross-sectional modeling.
+* Standardized output directory creation and file saving across scripts.
+* Cleaned up metric saving and model export logic.
+* Updated .gitignore to keep repo clean from large generated artifacts.
+* Tagged version to reflect the limitations of current event study results and prepare for next phase.
 
 ---
 
-## ⚙️ Inputs and Configuration
+### ⚠️ Limitations of Current Event Study Approach
 
-Each event (or group of events) is defined by:
-
-* `event_key`: string identifier (e.g. "harvey_2017", "wildfires", "hurricanes")
-* `lat, lon`: disaster center coordinates
-* `start_date`, end_date: analysis window
-* `sector_tickers`: relevant ETFs by sector
-* `weather_vars`: key weather metrics (e.g. windspeed, precip, temp)
-
-Users can switch between event keys in events.py and easily extend the dataset with future disasters.
-
----
-
-## 📊 Example Events
-
-```python
-EVENTS = {
-  "harvey_2017": {...},
-  "maria_2017": {...},
-  "wildfires_west_2020": {...},
-  "winter_storm_uri_2021": {...},
-  "maui_2023": {...},
-  ...
-}
-```
-
-Each entry includes disaster metadata, sector tickers, and estimated losses.
-
----
-
-## 🔋 Dependencies
-
-* `pandas`, `numpy`, `matplotlib`, `seaborn`
-* `scikit-learn`, `xgboost`
-* `tensorflow` or `keras` for LSTM
-* `yfinance` for stock data
-* Visual Crossing Weather API key (required)
+* Limited data points in some events after aligning weather and market data.
+* Small sample sizes in test sets (sometimes only a few dates) make prediction plots sparse.
+* Grouped-event analysis helps but does not fully address data scarcity.
+* Abnormal returns currently calculated with daily data only — higher-frequency data (hourly) could offer richer samples.
 
 ---
 
@@ -118,21 +73,27 @@ Each entry includes disaster metadata, sector tickers, and estimated losses.
 2. Choose an event (event_key) or group (event_type).
 3. Run:
 
+**Event Study Analysis**
 ```python
 python run_analysis.py --event_key helene_2024
 ```
+or
+**Tabular Regression Analysis**
+```python
+python tabular_regression.py --event_type Hurricane
+```
 
 4. Outputs include:
-* Abnormal and cumulative return plots
-* Model performance metrics
-* Saved model predictions and training logs
+* Metrics (metrics/)
+* Models (models/)
+* Plots (plots/)
+* Processed datasets (data/)
 
 ---
 
 ## 🛠️ To Do
-
-- [X] Export event summaries as reports
-- [ ] Incorporate confidence intervals on predictions
-- [ ] Optimize model parameters
-- [ ] Build interactive dashboard using Dash or Streamlit
-- [ ] Add social/environmental impact overlays (e.g., population affected, federal relief, etc.)
+- [ ] Explore hourly weather + market data for richer datasets.
+- [ ] Expand tabular regression task for individual event impact prediction.
+- [ ] Optimize hyperparameters for both classical and ML models.
+- [ ] Add interactive dashboard for results exploration.
+- [ ] Consider additional non-market impact data sources.
