@@ -72,8 +72,15 @@ def run_event_analysis(event_key, api_key):
         target = 'abnormal_return'
 
         print("Columns in merged_df:", merged_df.columns.tolist())
-        rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
-        rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
+        results_xgb  = train_xgboost_model(merged_df, features, target)
+        results_lstm = train_lstm_model(merged_df, features, target)
+
+        rmse_lstm = results_lstm["metrics"]["rmse"],
+        mae_lstm = results_lstm["metrics"]["mae"],
+        r2_lstm = results_lstm["metrics"]["r2"]
+        rmse_xgb = results_xgb["metrics"]["rmse"],
+        mae_xgb = results_xgb["metrics"]["mae"],
+        r2_xgb = results_xgb["metrics"]["r2"]
 
         # Save metrics to CSV
         metrics_dir = "metrics/single"
@@ -94,36 +101,50 @@ def run_event_analysis(event_key, api_key):
         os.makedirs(model_dir, exist_ok=True)
         model_path = os.path.join(model_dir, f"{event_key}_{ticker}_xgb.pkl")
         with open(model_path, "wb") as f:
-            pickle.dump(xgb_model, f)
+            pickle.dump(results_xgb["model"], f)
         model_path = os.path.join(model_dir, f"{event_key}_{ticker}_lstm.keras")
-        lstm_model.save(model_path)
+        results_lstm["model"].save(model_path)
 
         # Save training plots
         training_dir = "plots/training/single"
-        plot_training_history(history_xgb, "xgboost", ticker, event_key, save_dir=training_dir)
-        plot_training_history(history_lstm, "lstm", ticker, event_key, save_dir=training_dir)
+        plot_training_history(results_xgb["history"], "xgboost", ticker, event_key, save_dir=training_dir)
+        plot_training_history(results_lstm["history"], "lstm", ticker, event_key, save_dir=training_dir)
 
         # Save truth and predictions
-        car_true_lstm, car_pred_lstm = np.cumsum(y_test_lstm), np.cumsum(preds_lstm)
-        car_true_xgb, car_pred_xgb = np.cumsum(y_test_xgb), np.cumsum(preds_xgb)
-        results_lstm_df = pd.DataFrame({
-            'ar_true' : y_test_lstm,
-            'ar_pred' : preds_lstm,
-            'car_true' : car_true_lstm,
-            'car_pred' : car_pred_lstm
-            }, index=test_idx_lstm)
-        results_xgb_df = pd.DataFrame({
-            'ar_true' : y_test_xgb,
-            'ar_pred' : preds_xgb,
-            'car_true' : car_true_xgb,
-            'car_pred' : car_pred_xgb
-            }, index=test_idx_xgb)
-        results_lstm_df.to_csv(f"{training_dir}/{ticker}_{event_key}_lstm_ar_car.csv")
-        results_xgb_df.to_csv(f"{training_dir}/{ticker}_{event_key}_xgb_ar_car.csv")
+        results_xgb_train = pd.DataFrame({
+            'ar_true': results_xgb["train"]["y_true"],
+            'ar_pred': results_xgb["train"]["y_pred"],
+            'car_true': np.cumsum(results_xgb["train"]["y_true"]),
+            'car_pred': np.cumsum(results_xgb["train"]["y_pred"]),
+        }, index=results_xgb["train"]["index"])
+        results_xgb_test = pd.DataFrame({
+            'ar_true': results_xgb["test"]["y_true"],
+            'ar_pred': results_xgb["test"]["y_pred"],
+            'car_true': np.cumsum(results_xgb["test"]["y_true"]),
+            'car_pred': np.cumsum(results_xgb["test"]["y_pred"]),
+        }, index=results_xgb["test"]["index"])
+        results_xgb_train.to_csv(f"{training_dir}/{event_key}_{ticker}_xgb_train_ar_car.csv")
+        results_xgb_test.to_csv(f"{training_dir}/{event_key}_{ticker}_xgb_test_ar_car.csv")
 
+        results_lstm_train = pd.DataFrame({
+            'ar_true': results_lstm["train"]["y_true"],
+            'ar_pred': results_lstm["train"]["y_pred"],
+            'car_true': np.cumsum(results_lstm["train"]["y_true"]),
+            'car_pred': np.cumsum(results_lstm["train"]["y_pred"]),
+        }, index=results_lstm["train"]["index"])
+        results_lstm_test = pd.DataFrame({
+            'ar_true': results_lstm["test"]["y_true"],
+            'ar_pred': results_lstm["test"]["y_pred"],
+            'car_true': np.cumsum(results_lstm["test"]["y_true"]),
+            'car_pred': np.cumsum(results_lstm["test"]["y_pred"]),
+        }, index=results_lstm["test"]["index"])
+        results_lstm_train.to_csv(f"{training_dir}/{event_key}_{ticker}_lstm_train_ar_car.csv")        
+        results_lstm_test.to_csv(f"{training_dir}/{event_key}_{ticker}_lstm_test_ar_car.csv")
+
+        # Plot test set
         plot_predictions_separately(
-            test_idx_lstm, y_test_lstm, preds_lstm,
-            test_idx_xgb, y_test_xgb, preds_xgb, 
+            results_lstm["test"]["index"], results_lstm["test"]["y_true"], results_lstm["test"]["y_pred"],
+            results_xgb["test"]["index"], results_xgb["test"]["y_true"], results_xgb["test"]["y_pred"],            
             ticker, event_key, save_dir="plots/test/single"
         )
 
@@ -232,21 +253,28 @@ def run_cross_event_analysis(event_type, api_key):
             features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
             target = 'abnormal_return'
 
-            rmse_xgb, mae_xgb, r2_xgb, mape_xgb, max_err_xgb, history_xgb, preds_xgb, test_idx_xgb, y_test_xgb, xgb_model = train_xgboost_model(merged_df, features, target)
-            rmse_lstm, mae_lstm, r2_lstm, mape_lstm, max_err_lstm, history_lstm, preds_lstm, test_idx_lstm, y_test_lstm, lstm_model = train_lstm_model(merged_df, features, target)
+            results_xgb = train_xgboost_model(merged_df, features, target)
+            results_lstm = train_lstm_model(merged_df, features, target)
+
+            rmse_lstm = results_lstm["metrics"]["rmse"],
+            mae_lstm = results_lstm["metrics"]["mae"],
+            r2_lstm = results_lstm["metrics"]["r2"]
+            rmse_xgb = results_xgb["metrics"]["rmse"],
+            mae_xgb = results_xgb["metrics"]["mae"],
+            r2_xgb = results_xgb["metrics"]["r2"]
 
             # Save metrics to CSV
             metrics_dir = "metrics/cross"
             os.makedirs(metrics_dir, exist_ok=True)
             save_metrics_csv(
-                metrics_dir + "/metrics_" + ticker + "_" + event_type.lower() + ".csv",
-                [event_type, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
-                header=["event_type", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
+                metrics_dir + "/metrics_" + ticker + "_" + event_type + ".csv",
+                [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
+                header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
             )
             save_metrics_csv(
-                metrics_dir + "/metrics_" + ticker + "_" + event_type.lower() + ".csv",
-                [event_type, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
-                header=["event_type", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
+                metrics_dir + "/metrics_" + ticker + "_" + event_type + ".csv",
+                [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
+                header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
             )
 
             # Save models
@@ -254,38 +282,51 @@ def run_cross_event_analysis(event_type, api_key):
             os.makedirs(model_dir, exist_ok=True)
             model_path = os.path.join(model_dir, f"{event_type}_{ticker}_xgb.pkl")
             with open(model_path, "wb") as f:
-                pickle.dump(xgb_model, f)
+                pickle.dump(results_xgb["model"], f)
             model_path = os.path.join(model_dir, f"{event_type}_{ticker}_lstm.keras")
-            lstm_model.save(model_path)
+            results_lstm["model"].save(model_path)
 
             # Save training plots
             training_dir = "plots/training/cross"
             os.makedirs(training_dir, exist_ok=True)
-            plot_training_history(history_xgb, "xgboost", ticker, event_type, save_dir=training_dir)
-            plot_training_history(history_lstm, "lstm", ticker, event_type, save_dir=training_dir)
+            plot_training_history(results_xgb["history"], "xgboost", ticker, event_type, save_dir=training_dir)
+            plot_training_history(results_lstm["history"], "lstm", ticker, event_type, save_dir=training_dir)
 
             # Save truth and predictions
-            # These are averages (aar and caar) but we need to standardize the naming for the pipeline
-            car_true_lstm, car_pred_lstm = np.cumsum(y_test_lstm), np.cumsum(preds_lstm)
-            car_true_xgb, car_pred_xgb = np.cumsum(y_test_xgb), np.cumsum(preds_xgb)
-            results_lstm_df = pd.DataFrame({
-                'ar_true' : y_test_lstm,
-                'ar_pred' : preds_lstm,
-                'car_true' : car_true_lstm,
-                'car_pred' : car_pred_lstm
-                }, index=test_idx_lstm)
-            results_xgb_df = pd.DataFrame({
-                'ar_true' : y_test_xgb,
-                'ar_pred' : preds_xgb,
-                'car_true' : car_true_xgb,
-                'car_pred' : car_pred_xgb
-                }, index=test_idx_xgb)
-            results_lstm_df.to_csv(f"{training_dir}/{ticker}_{event_type}_lstm_ar_car.csv")
-            results_xgb_df.to_csv(f"{training_dir}/{ticker}_{event_type}_xgb_ar_car.csv")
+            results_xgb_train = pd.DataFrame({
+                'ar_true': results_xgb["train"]["y_true"],
+                'ar_pred': results_xgb["train"]["y_pred"],
+                'car_true': np.cumsum(results_xgb["train"]["y_true"]),
+                'car_pred': np.cumsum(results_xgb["train"]["y_pred"]),
+            }, index=results_xgb["train"]["index"])
+            results_xgb_test = pd.DataFrame({
+                'ar_true': results_xgb["test"]["y_true"],
+                'ar_pred': results_xgb["test"]["y_pred"],
+                'car_true': np.cumsum(results_xgb["test"]["y_true"]),
+                'car_pred': np.cumsum(results_xgb["test"]["y_pred"]),
+            }, index=results_xgb["test"]["index"])
+            results_xgb_train.to_csv(f"{training_dir}/{event_type}_{ticker}_xgb_train_ar_car.csv")
+            results_xgb_test.to_csv(f"{training_dir}/{event_type}_{ticker}_xgb_test_ar_car.csv")
 
+            results_lstm_train = pd.DataFrame({
+                'ar_true': results_lstm["train"]["y_true"],
+                'ar_pred': results_lstm["train"]["y_pred"],
+                'car_true': np.cumsum(results_lstm["train"]["y_true"]),
+                'car_pred': np.cumsum(results_lstm["train"]["y_pred"]),
+            }, index=results_lstm["train"]["index"])
+            results_lstm_test = pd.DataFrame({
+                'ar_true': results_lstm["test"]["y_true"],
+                'ar_pred': results_lstm["test"]["y_pred"],
+                'car_true': np.cumsum(results_lstm["test"]["y_true"]),
+                'car_pred': np.cumsum(results_lstm["test"]["y_pred"]),
+            }, index=results_lstm["test"]["index"])
+            results_lstm_train.to_csv(f"{training_dir}/{event_type}_{ticker}_lstm_train_ar_car.csv")        
+            results_lstm_test.to_csv(f"{training_dir}/{event_type}_{ticker}_lstm_test_ar_car.csv")
+
+            # Plot test set
             plot_predictions_separately(
-                test_idx_lstm, y_test_lstm, preds_lstm,
-                test_idx_xgb, y_test_xgb, preds_xgb,
+                results_lstm["test"]["index"], results_lstm["test"]["y_true"], results_lstm["test"]["y_pred"],
+                results_xgb["test"]["index"], results_xgb["test"]["y_true"], results_xgb["test"]["y_pred"],            
                 ticker, event_type, save_dir="plots/test/cross"
             )
 

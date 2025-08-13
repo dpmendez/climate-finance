@@ -36,8 +36,15 @@ def run_tabular_regression(data_dir, event_type, features=["temperature"], targe
         print(f"\nRunning tabular regression for {ticker}...\n")
 
         try:
-            rmse, mae, r2, mape, max_err, history, y_pred, idx, y_true, model  = train_xgboost_model(df, features, target)
-            all_results[ticker] = {"RMSE": rmse, "MAE": mae, "R2": r2}
+            results  = train_xgboost_model(df, features, target)
+            rmse = results["metrics"]["rmse"]
+            mae = results["metrics"]["mae"]
+            r2 = results["metrics"]["r2"]
+            all_results[ticker] = {
+                "rmse": rmse,
+                "mae": mae,
+                "r2": r2
+            }
 
             # === Directories ===
             metrics_dir = "metrics/tabular"
@@ -60,23 +67,34 @@ def run_tabular_regression(data_dir, event_type, features=["temperature"], targe
             # === Save model ===
             model_path = os.path.join(model_dir, f"{event_type}_{ticker}_xgb.pkl")
             with open(model_path, "wb") as f:
-                pickle.dump(model, f)
+                pickle.dump(results["model"], f)
 
-            # === Save training plots ===
-            plot_training_history(history, "xgboost", ticker, event_type, save_dir=training_dir)
-            plot_predictions(idx, y_true, y_pred, "xgboost", ticker, event_type, save_dir=test_dir)
+            # Save training plots
+            plot_training_history(results["hisotry"], "xgboost", ticker, event_type, save_dir=training_dir)
+
+            # Plot test set
+            plot_predictions(
+                results["test"]["index"], results["test"]["y_true"], results["test"]["y_pred"],
+                "xgboost", ticker, event_type, save_dir=test_dir
+            )
 
             # === Save AAR & CAAR truth vs pred ===
-            car_true = np.cumsum(y_true)
-            car_pred = np.cumsum(y_pred)
-            results_df = pd.DataFrame({
-                'ar_true' : y_true,
-                'ar_pred' : y_pred,
-                'car_true': car_true,
-                'car_pred': car_pred,
-            }, index=idx)
+            results_df_train = pd.DataFrame({
+                'ar_true': results["train"]["y_true"],
+                'ar_pred': results["train"]["y_pred"],
+                'car_true': np.cumsum(results["train"]["y_true"]),
+                'car_pred': np.cumsum(results["train"]["y_pred"]),
+            }, index=results["train"]["index"])
+            results_df_train.to_csv(f"{training_dir}/{event_type}_{ticker}_xgb_train_ar_car.csv")
 
-            results_df.to_csv(f"{training_dir}/{ticker}_{event_type}_xgb_ar_car.csv")
+            results_df_test = pd.DataFrame({
+                'ar_true': results["test"]["y_true"],
+                'ar_pred': results["test"]["y_pred"],
+                'car_true': np.cumsum(results["test"]["y_true"]),
+                'car_pred': np.cumsum(results["test"]["y_pred"]),
+            }, index=results["test"]["index"])
+            results_df_test.to_csv(f"{training_dir}/{event_type}_{ticker}_xgb_test_ar_car.csv")
+
 
         except Exception as e:
             print(f"Failed to run model for {ticker}: {e}")
@@ -100,7 +118,7 @@ if __name__ == "__main__":
     if event_type not in EVENT_FEATURES:
         raise ValueError(f"Unknown event type: {event_type}. Valid options: {list(EVENT_FEATURES.keys())}")
 
-    data_dir = f"../data/aar_weather_dfs/{event_type}"
+    data_dir = f"../data/aar_weather_dfs"
     os.makedirs(data_dir, exist_ok=True)
 
     features    = EVENT_FEATURES.get(event_type, ['temperature'])

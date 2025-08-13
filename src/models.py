@@ -18,6 +18,8 @@ from sklearn.preprocessing import MinMaxScaler
 def train_xgboost_model(df, features, target):
     df = df.dropna(subset=features + [target])
     
+    df = df.sort_index()
+
     # Keep DataFrames for index handling
     X = df[features]
     y = df[target]
@@ -35,11 +37,16 @@ def train_xgboost_model(df, features, target):
 
     X_test = X.iloc[val_end:]
     y_test = y.iloc[val_end:]
-    test_index = X_test.index  # preserves correct datetime index
 
+    # Store indexes
+    idx_train = X_train.index
+    idx_test = X_test.index
+
+    # Train
     dtrain = xgb.DMatrix(X_train, label=y_train)
     dval = xgb.DMatrix(X_val, label=y_val)
-    dtest = xgb.DMatrix(X_test)
+    dtest_train = xgb.DMatrix(X_train)
+    dtest_test = xgb.DMatrix(X_test)
 
     evals_result = {}
     params = {
@@ -51,22 +58,45 @@ def train_xgboost_model(df, features, target):
         params,
         dtrain,
         num_boost_round=500,
-        evals=[(dtrain, "train"), (dval, "val")],
+        evals=[(dtrain, "train"), (xgb.DMatrix(X_val, label=y_val), "val")],
         early_stopping_rounds=10,
         evals_result=evals_result,
         verbose_eval=False
     )
 
-    preds = model.predict(dtest)
+    # Predictions
+    preds_train = model.predict(dtest_train)
+    preds_test = model.predict(dtest_test)
 
-    rmse = np.sqrt(mean_squared_error(y_test.values, preds))
-    mae = mean_absolute_error(y_test.values, preds)
-    r2 = r2_score(y_test.values, preds)
-    mape = np.mean(np.abs((y_test.values - preds) / np.maximum(np.abs(y_test.values), 1e-8))) * 100
-    max_err = max_error(y_test.values, preds)
+    # Metrics on test
+    rmse = np.sqrt(mean_squared_error(y_test.values, preds_test))
+    mae = mean_absolute_error(y_test.values, preds_test)
+    r2 = r2_score(y_test.values, preds_test)
+    mape = np.mean(np.abs((y_test.values - preds_test) / np.maximum(np.abs(y_test.values), 1e-8))) * 100
+    max_err = max_error(y_test.values, preds_test)
 
-    return rmse, mae, r2, mape, max_err, evals_result, preds, test_index, y_test.values, model
-
+    # Return everything neatly
+    return {
+        "metrics": {
+            "rmse": rmse,
+            "mae": mae,
+            "r2": r2,
+            "mape": mape,
+            "max_err": max_err
+        },
+        "history": evals_result,
+        "model": model,
+        "train": {
+            "index": idx_train,
+            "y_true": y_train.values,
+            "y_pred": preds_train
+        },
+        "test": {
+            "index": idx_test,
+            "y_true": y_test.values,
+            "y_pred": preds_test
+        }
+    }
 
 def train_lstm_model(df, features, target):
     df = df.dropna(subset=features + [target])
@@ -118,4 +148,25 @@ def train_lstm_model(df, features, target):
     mape = np.mean(np.abs((y_test - preds) / np.maximum(np.abs(y_test), 1e-8))) * 100
     max_err = max_error(y_test, preds)
 
-    return rmse, mae, r2, mape, max_err, history, preds, test_index, y_test, model
+    # Return everything neatly
+    return {
+        "metrics": {
+            "rmse": rmse,
+            "mae": mae,
+            "r2": r2,
+            "mape": mape,
+            "max_err": max_err
+        },
+        "history": history,
+        "model": model,
+        "train": {
+            "index": idx_train,
+            "y_true": y_train.values,
+            "y_pred": preds_train
+        },
+        "test": {
+            "index": idx_test,
+            "y_true": y_test.values,
+            "y_pred": preds_test
+        }
+    }
