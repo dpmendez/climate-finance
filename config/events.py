@@ -210,8 +210,86 @@ EVENTS = {
             "XTN": "Transportation",
             "KRE": "Regional Banks"
         }
+    },
+    "milton_2024": {
+        "name": "Hurricane Milton",
+        "type": "Hurricane",
+        "event_date": "2024-10-09",
+        "start_date": "2024-10-05",
+        "end_date": "2024-10-12",
+        "location": {"lat": 27.3, "lon": -82.6},  # Siesta Key / Tampa Bay area
+        "index": "SPY",
+        "sector_etfs": {
+            "XLE": "Energy",
+            "XLI": "Industrials",
+            "XLP": "Consumer Staples",
+            "XLU": "Utilities"
+        },
+        "regional_etfs": {
+            "XLRE": "Real Estate", # Regional exposure
+            "IAT": "Regional Banks" # Regional Banks ETF (many FL banks)
+        }
+    },
+    "wildfires_southcal_2025": {
+        "name": "Southern California Wildfires 2025",
+        "type": "Wildfire",
+        "event_date": "2025-01-15",
+        "start_date": "2025-01-07",
+        "end_date": "2025-01-31",
+        "location": {"lat": 34.05, "lon": -118.25},  # Los Angeles
+        "index": "SPY",
+        "sector_etfs": {
+            "XLU": "Utilities",
+            "XLE": "Energy",
+            "XLI": "Industrials",
+            "XLRE": "Real Estate"
+        },
+        "regional_etfs": {
+            "PWZ": "California AMT-Free Municipal Bonds", # Invesco California AMT-Free Municipal Bond ETF
+            "CMF": "iShares California Muni Bonds" # iShares California Muni Bond ETF
+        }
+    },
+    "centraltexas_floods_2025": {
+        "name": "Central Texas Floods 2025",
+        "type": "Flood",
+        "event_date": "2025-07-04",
+        "start_date": "2025-07-03",
+        "end_date": "2025-07-07",
+        "location": {"lat": 30.1, "lon": -99.1},  # Kerr County / Hill Country
+        "index": "SPY",
+        "sector_etfs": {
+            "XLF": "Financials",
+            "XLRE": "Real Estate",
+            "XLI": "Industrials",
+            "XLP": "Consumer Staples"
+        },
+        "regional_etfs": {
+            "TEXN": "iShares Texas Equity ETF", # Tracks major Texas-headquartered firms like Oracle and Tesla
+            "TXS": "Texas Equity Index ETF" # Diversified exposure to Texas economy, energy, and infrastructure
+        }
+    },
+    "madrefire_2025": {
+        "name": "Madre Fire 2025",
+        "type": "Wildfire",
+        "event_date": "2025-07-31",
+        "start_date": "2025-07-29",
+        "end_date": "2025-08-05",
+        "location": {"lat": 34.5, "lon": -120.0},  # Likely coastal California region
+        "index": "SPY",
+        "sector_etfs": {
+            "XLU": "Utilities",
+            "XLE": "Energy",
+            "XLRE": "Real Estate",
+            "XLV": "Healthcare"
+        },
+        "regional_etfs": {
+            "WOOD": "Timber & Forestry exposure",
+            "KIE": "Insurance sector exposure",
+            "ITB": "Home Construction exposure"
+        }
     }
 }
+
 
 
 EVENT_FEATURES = {
