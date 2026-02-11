@@ -1,121 +1,149 @@
 import numpy as np
 import pandas as pd
+import pickle
 from sklearn.metrics import (
     mean_squared_error,
     mean_absolute_error,
     r2_score,
-    mean_absolute_percentage_error,
     max_error,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
 import xgboost as xgb
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
-from tensorflow.keras.optimizers import Adam
-from sklearn.preprocessing import MinMaxScaler
 
 
-def train_xgboost_model(df, features, target):
-    df = df.dropna(subset=features + [target])
-    
-    # Keep DataFrames for index handling
-    X = df[features]
-    y = df[target]
+def compute_metrics(y_true, y_pred):
+    """Compute regression metrics. Returns a dict."""
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    return {
+        'rmse': np.sqrt(mean_squared_error(y_true, y_pred)),
+        'mae': mean_absolute_error(y_true, y_pred),
+        'r2': r2_score(y_true, y_pred),
+        'mape': np.mean(np.abs((y_true - y_pred) / np.maximum(np.abs(y_true), 1e-8))) * 100,
+        'max_error': max_error(y_true, y_pred),
+    }
 
-    # Sequential split, like in LSTM
-    n = len(df)
-    train_end = int(n * 0.7)
-    val_end = int(n * 0.85)
 
-    X_train = X.iloc[:train_end]
-    y_train = y.iloc[:train_end]
-
-    X_val = X.iloc[train_end:val_end]
-    y_val = y.iloc[train_end:val_end]
-
-    X_test = X.iloc[val_end:]
-    y_test = y.iloc[val_end:]
-    test_index = X_test.index  # preserves correct datetime index
-
+def train_xgboost(X_train, y_train, X_test, y_test):
+    """Train XGBoost regressor. Returns (predictions, model)."""
     dtrain = xgb.DMatrix(X_train, label=y_train)
-    dval = xgb.DMatrix(X_val, label=y_val)
     dtest = xgb.DMatrix(X_test)
 
-    evals_result = {}
+    # Use a small validation split from training data for early stopping
+    n = len(X_train)
+    val_split = int(n * 0.85)
+    dtrain_inner = xgb.DMatrix(X_train.iloc[:val_split], label=y_train.iloc[:val_split])
+    dval_inner = xgb.DMatrix(X_train.iloc[val_split:], label=y_train.iloc[val_split:])
+
     params = {
         "objective": "reg:squarederror",
-        "eval_metric": "rmse"
+        "eval_metric": "rmse",
+        "max_depth": 4,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
     }
 
     model = xgb.train(
         params,
-        dtrain,
+        dtrain_inner,
         num_boost_round=500,
-        evals=[(dtrain, "train"), (dval, "val")],
-        early_stopping_rounds=10,
-        evals_result=evals_result,
-        verbose_eval=False
+        evals=[(dtrain_inner, "train"), (dval_inner, "val")],
+        early_stopping_rounds=20,
+        verbose_eval=False,
     )
 
+    # Retrain on full training set with the best number of rounds
+    best_rounds = model.best_iteration + 1
+    model = xgb.train(params, dtrain, num_boost_round=best_rounds, verbose_eval=False)
+
     preds = model.predict(dtest)
-
-    rmse = np.sqrt(mean_squared_error(y_test.values, preds))
-    mae = mean_absolute_error(y_test.values, preds)
-    r2 = r2_score(y_test.values, preds)
-    mape = np.mean(np.abs((y_test.values - preds) / np.maximum(np.abs(y_test.values), 1e-8))) * 100
-    max_err = max_error(y_test.values, preds)
-
-    return rmse, mae, r2, mape, max_err, evals_result, preds, test_index, y_test.values, model
+    return preds, model
 
 
-def train_lstm_model(df, features, target):
-    df = df.dropna(subset=features + [target])
-    X = df[features].values
-    y = df[target].values
+def train_random_forest(X_train, y_train, X_test, y_test):
+    """Train Random Forest regressor. Returns (predictions, model)."""
+    model = RandomForestRegressor(
+        n_estimators=200,
+        max_depth=6,
+        min_samples_leaf=5,
+        random_state=42,
+    )
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+    return preds, model
 
-    # Scale
-    scaler = MinMaxScaler()
-    X_scaled = scaler.fit_transform(X) # scale so values lie between 0 and 1
 
-    # Sliding window
-    window_size = 5
-    X_seq, y_seq = [], []
-    for i in range(window_size, len(X_scaled)):
-        X_seq.append(X_scaled[i - window_size:i])
-        y_seq.append(y[i])
+def train_linear_baseline(X_train, y_train, X_test, y_test):
+    """Train OLS linear regression baseline. Returns (predictions, model)."""
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+    return preds, model
 
-    X_seq = np.array(X_seq)
-    y_seq = np.array(y_seq)
 
-    # Split
-    n = len(X_seq)
-    train_end = int(n * 0.7)
-    val_end = int(n * 0.85)
+MODEL_REGISTRY = {
+    'xgboost': train_xgboost,
+    'random_forest': train_random_forest,
+    'ols': train_linear_baseline,
+}
 
-    X_train, y_train = X_seq[:train_end], y_seq[:train_end]
-    X_val, y_val = X_seq[train_end:val_end], y_seq[train_end:val_end]
-    X_test, y_test = X_seq[val_end:], y_seq[val_end:]
 
-    # Index offset due to sliding window
-    test_index = df.index[window_size + val_end:]
+def run_leave_one_event_out(df, features, target, event_col='event_key'):
+    """
+    Leave-one-event-out cross-validation.
 
-    model = Sequential([
-        LSTM(50, activation='relu', input_shape=(window_size, X_seq.shape[2])),
-        Dense(1)
-    ])
-    model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
+    For each unique event: train on all OTHER events, predict the held-out event.
+    Runs all three models (XGBoost, Random Forest, OLS).
 
-    history = model.fit(X_train, y_train,
-                        validation_data=(X_val, y_val),
-                        epochs=20,
-                        batch_size=8,
-                        verbose=0)
+    Returns:
+        fold_results: list of dicts, one per fold, with metrics and predictions
+        overall_metrics: dict of {model_name: aggregated metrics across all folds}
+        final_models: dict of {model_name: model trained on ALL data}
+    """
+    events = df[event_col].unique()
+    fold_results = []
 
-    preds = model.predict(X_test).flatten()
-    rmse = np.sqrt(mean_squared_error(y_test, preds))
-    mae = mean_absolute_error(y_test, preds)
-    r2 = r2_score(y_test, preds)
-    mape = np.mean(np.abs((y_test - preds) / np.maximum(np.abs(y_test), 1e-8))) * 100
-    max_err = max_error(y_test, preds)
+    for held_out_event in events:
+        train_mask = df[event_col] != held_out_event
+        test_mask = df[event_col] == held_out_event
 
-    return rmse, mae, r2, mape, max_err, history, preds, test_index, y_test, model
+        X_train = df.loc[train_mask, features]
+        y_train = df.loc[train_mask, target]
+        X_test = df.loc[test_mask, features]
+        y_test = df.loc[test_mask, target]
+
+        if len(X_test) == 0 or len(X_train) == 0:
+            continue
+
+        fold = {
+            'event_key': held_out_event,
+            'test_index': df.loc[test_mask].index,
+            'relative_days': df.loc[test_mask, 'relative_day'].values,
+            'y_true': y_test.values,
+        }
+
+        for model_name, train_fn in MODEL_REGISTRY.items():
+            preds, _ = train_fn(X_train, y_train, X_test, y_test)
+            fold[f'y_pred_{model_name}'] = preds
+            fold[f'metrics_{model_name}'] = compute_metrics(y_test.values, preds)
+
+        fold_results.append(fold)
+
+    # Aggregate metrics across folds
+    overall_metrics = {}
+    for model_name in MODEL_REGISTRY:
+        all_true = np.concatenate([f['y_true'] for f in fold_results])
+        all_pred = np.concatenate([f[f'y_pred_{model_name}'] for f in fold_results])
+        overall_metrics[model_name] = compute_metrics(all_true, all_pred)
+
+    # Train final models on all data
+    X_all = df[features]
+    y_all = df[target]
+    final_models = {}
+    for model_name, train_fn in MODEL_REGISTRY.items():
+        _, model = train_fn(X_all, y_all, X_all, y_all)
+        final_models[model_name] = model
+
+    return fold_results, overall_metrics, final_models
