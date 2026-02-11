@@ -1,340 +1,174 @@
-import joblib
-import json
 import os
 import sys
 import numpy as np
 import pandas as pd
 import pickle
-import traceback
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, max_error
-from market import fetch_market_data
-from models import train_xgboost_model, train_lstm_model
-from returns import *
-from utils import save_metrics_csv
-from viz import plot_predictions_separately, plot_training_history
-from weather import fetch_visualcrossing_weather
 
-from config.events import EVENTS, EVENT_FEATURES
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
 
-def run_event_analysis(event_key, api_key):
-    event = EVENTS[event_key]
-    print(f"Analyzing {event['name']}...")
+from config.events import EVENT_FEATURES
+from dataset import build_pooled_dataset, get_sector_groups
+from models import run_leave_one_event_out, MODEL_REGISTRY
+from viz import (
+    plot_actual_vs_predicted,
+    plot_feature_importance,
+    plot_car_by_event,
+    plot_cv_metrics_summary,
+)
 
-    market = event['index']
-    tickers = event['sector_etfs']
-    start_date = event['start_date']
-    end_date = event['end_date']
-    event_date = event['event_date']
-    lat = event['location']['lat']
-    lon = event['location']['lon']
-    disaster_type = event['type']
 
-    market_df = fetch_market_data([market], start_date, end_date)[market]
-    sector_dict = fetch_market_data(tickers, start_date, end_date)
+def run_pooled_analysis(event_type, api_key):
+    """
+    Main analysis orchestrator for pooled tabular regression.
 
-    # Define estimation window (30 days before event)
-    estimation_window = market_df.index[market_df.index < event_date][-30:]
+    1. Builds a pooled dataset for all events of the given type
+    2. For each sector, runs leave-one-event-out CV with all models
+    3. Saves metrics, predictions, models, and plots
+    """
+    # Build pooled dataset
+    pooled_df = build_pooled_dataset(event_type, api_key)
 
-    # Estimate market model
-    model_params = estimate_market_model(market_df, sector_dict, estimation_window)
-    save_market_model_params(model_params, event_key, 'models/single')
+    # Output directory
+    output_dir = os.path.join("output", event_type)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Compute AR and CAR
-    abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
-    car = compute_car(abnormal_returns)
+    # Save full pooled dataset
+    pooled_path = os.path.join(output_dir, "pooled_dataset.csv")
+    pooled_df.to_csv(pooled_path, index=False)
+    print(f"\nSaved pooled dataset to {pooled_path}")
 
-    # Merge AR with weather, prediction, etc.
-    weather_df = fetch_visualcrossing_weather(api_key, lat, lon, start_date, end_date, disaster_type)
+    # Determine feature columns (delta_* columns from EVENT_FEATURES)
+    raw_features = EVENT_FEATURES.get(event_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
+    delta_features = [f"delta_{f}" for f in raw_features]
+    features = ['relative_day'] + [f for f in delta_features if f in pooled_df.columns]
+    target = 'ar'
 
-    first_sector = list(abnormal_returns.keys())[0]
-    common_index = abnormal_returns[first_sector].index
+    print(f"\nFeatures: {features}")
+    print(f"Target: {target}")
 
-    # sectors are forced to have the same dates so we can use this line ...
-    # weather_df = weather_df.reindex(abnormal_returns[first_sector].index).ffill().bfill()
-    # but the intersection is safer
-    for df in abnormal_returns.values():
-        common_index = common_index.intersection(df.index)
-    
-    weather_df = weather_df.reindex(common_index).ffill().bfill()
+    # Per-sector analysis
+    sector_groups = get_sector_groups(pooled_df)
+    all_sector_metrics = []
 
-    for ticker in tickers:
-        print(f"\n--- {ticker} ---")
+    for sector, sector_df in sector_groups.items():
+        n_events = sector_df['event_key'].nunique()
+        print(f"\n{'='*60}")
+        print(f"Sector: {sector} | {len(sector_df)} rows | {n_events} events")
+        print(f"{'='*60}")
 
-        ar = abnormal_returns[ticker]
-        if isinstance(ar, pd.DataFrame):
-            ar = ar.squeeze()
+        if n_events < 2:
+            print(f"  Skipping {sector}: need at least 2 events for leave-one-out CV")
+            continue
 
-        merged_df = pd.concat([ar.rename('abnormal_return'), weather_df], axis=1).dropna()
-        merged_df.sort_index(inplace=True)
-        print(f"Merged length for {ticker}: {len(merged_df)}")
+        # Check that all features exist
+        available_features = [f for f in features if f in sector_df.columns]
+        if len(available_features) < len(features):
+            missing = set(features) - set(available_features)
+            print(f"  Warning: missing features {missing}, using {available_features}")
+        features_to_use = available_features
 
-        features = weather_df.columns.tolist()
-        target = 'abnormal_return'
+        # Drop rows with NaN in features or target
+        sector_df = sector_df.dropna(subset=features_to_use + [target])
 
-        print("Columns in merged_df:", merged_df.columns.tolist())
-        results_xgb  = train_xgboost_model(merged_df, features, target)
-        results_lstm = train_lstm_model(merged_df, features, target)
+        # Run leave-one-event-out CV
+        fold_results, overall_metrics, final_models = run_leave_one_event_out(
+            sector_df, features_to_use, target, event_col='event_key'
+        )
 
-        rmse_lstm = results_lstm["metrics"]["rmse"],
-        mae_lstm = results_lstm["metrics"]["mae"],
-        r2_lstm = results_lstm["metrics"]["r2"]
-        rmse_xgb = results_xgb["metrics"]["rmse"],
-        mae_xgb = results_xgb["metrics"]["mae"],
-        r2_xgb = results_xgb["metrics"]["r2"]
+        # Print metrics summary
+        for model_name, metrics in overall_metrics.items():
+            print(f"  {model_name:15s} | RMSE: {metrics['rmse']:.6f} | MAE: {metrics['mae']:.6f} | R2: {metrics['r2']:.4f}")
+            all_sector_metrics.append({
+                'sector': sector,
+                'model': model_name,
+                **metrics,
+            })
 
-        # Save metrics to CSV
-        metrics_dir = "metrics/single"
+        # --- Save outputs ---
+
+        # Metrics
+        metrics_dir = os.path.join(output_dir, "metrics")
         os.makedirs(metrics_dir, exist_ok=True)
-        save_metrics_csv(
-            metrics_dir + "/metrics_" + ticker + "_" + event_key + ".csv",
-            [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
-            header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
-        )
-        save_metrics_csv(
-            metrics_dir + "/metrics_" + ticker + "_" + event_key + ".csv",
-            [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
-            header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
-        )
+        metrics_rows = []
+        for fold in fold_results:
+            for model_name in MODEL_REGISTRY:
+                m = fold[f'metrics_{model_name}']
+                metrics_rows.append({
+                    'held_out_event': fold['event_key'],
+                    'model': model_name,
+                    **m,
+                })
+        # Add overall row
+        for model_name, m in overall_metrics.items():
+            metrics_rows.append({
+                'held_out_event': 'OVERALL',
+                'model': model_name,
+                **m,
+            })
+        metrics_df = pd.DataFrame(metrics_rows)
+        metrics_df.to_csv(os.path.join(metrics_dir, f"{sector}_cv_metrics.csv"), index=False)
 
-        # Save models
-        model_dir = "models/single"
+        # Predictions
+        preds_dir = os.path.join(output_dir, "predictions")
+        os.makedirs(preds_dir, exist_ok=True)
+        pred_rows = []
+        for fold in fold_results:
+            for i in range(len(fold['y_true'])):
+                row = {
+                    'event_key': fold['event_key'],
+                    'relative_day': fold['relative_days'][i],
+                    'ar_true': fold['y_true'][i],
+                }
+                for model_name in MODEL_REGISTRY:
+                    row[f'ar_pred_{model_name}'] = fold[f'y_pred_{model_name}'][i]
+                pred_rows.append(row)
+
+        preds_df = pd.DataFrame(pred_rows).sort_values(['event_key', 'relative_day'])
+
+        # Compute CAR columns
+        for model_name in MODEL_REGISTRY:
+            preds_df[f'car_pred_{model_name}'] = preds_df.groupby('event_key')[f'ar_pred_{model_name}'].cumsum()
+        preds_df['car_true'] = preds_df.groupby('event_key')['ar_true'].cumsum()
+
+        preds_df.to_csv(os.path.join(preds_dir, f"{sector}_cv_predictions.csv"), index=False)
+
+        # Models
+        model_dir = os.path.join(output_dir, "models")
         os.makedirs(model_dir, exist_ok=True)
-        model_path = os.path.join(model_dir, f"{event_key}_{ticker}_xgb.pkl")
-        with open(model_path, "wb") as f:
-            pickle.dump(results_xgb["model"], f)
-        model_path = os.path.join(model_dir, f"{event_key}_{ticker}_lstm.keras")
-        results_lstm["model"].save(model_path)
-
-        # Save training plots
-        training_dir = "plots/training/single"
-        plot_training_history(results_xgb["history"], "xgboost", ticker, event_key, save_dir=training_dir)
-        plot_training_history(results_lstm["history"], "lstm", ticker, event_key, save_dir=training_dir)
-
-        # Save truth and predictions
-        results_xgb_train = pd.DataFrame({
-            'ar_true': results_xgb["train"]["y_true"],
-            'ar_pred': results_xgb["train"]["y_pred"],
-            'car_true': np.cumsum(results_xgb["train"]["y_true"]),
-            'car_pred': np.cumsum(results_xgb["train"]["y_pred"]),
-        }, index=results_xgb["train"]["index"])
-        results_xgb_test = pd.DataFrame({
-            'ar_true': results_xgb["test"]["y_true"],
-            'ar_pred': results_xgb["test"]["y_pred"],
-            'car_true': np.cumsum(results_xgb["test"]["y_true"]),
-            'car_pred': np.cumsum(results_xgb["test"]["y_pred"]),
-        }, index=results_xgb["test"]["index"])
-        results_xgb_train.to_csv(f"{training_dir}/{event_key}_{ticker}_xgb_train_ar_car.csv")
-        results_xgb_test.to_csv(f"{training_dir}/{event_key}_{ticker}_xgb_test_ar_car.csv")
-
-        results_lstm_train = pd.DataFrame({
-            'ar_true': results_lstm["train"]["y_true"],
-            'ar_pred': results_lstm["train"]["y_pred"],
-            'car_true': np.cumsum(results_lstm["train"]["y_true"]),
-            'car_pred': np.cumsum(results_lstm["train"]["y_pred"]),
-        }, index=results_lstm["train"]["index"])
-        results_lstm_test = pd.DataFrame({
-            'ar_true': results_lstm["test"]["y_true"],
-            'ar_pred': results_lstm["test"]["y_pred"],
-            'car_true': np.cumsum(results_lstm["test"]["y_true"]),
-            'car_pred': np.cumsum(results_lstm["test"]["y_pred"]),
-        }, index=results_lstm["test"]["index"])
-        results_lstm_train.to_csv(f"{training_dir}/{event_key}_{ticker}_lstm_train_ar_car.csv")        
-        results_lstm_test.to_csv(f"{training_dir}/{event_key}_{ticker}_lstm_test_ar_car.csv")
-
-        # Plot test set
-        plot_predictions_separately(
-            results_lstm["test"]["index"], results_lstm["test"]["y_true"], results_lstm["test"]["y_pred"],
-            results_xgb["test"]["index"], results_xgb["test"]["y_true"], results_xgb["test"]["y_pred"],            
-            ticker, event_key, save_dir="plots/test/single"
-        )
-
-
-def run_cross_event_analysis(event_type, api_key):
-    """
-    Run analysis for all events of a given disaster type (e.g., all hurricanes).
-    Saves model results and summary metrics for each.
-    """
-    print(f"\nRunning cross-event analysis for all {event_type} events...\n")
-
-    ar_by_event = {}  # To hold abnormal returns per event
-    weather_by_event = {}
-    tickers_set = set()
-
-    # Collect relevant data
-    for event_key, event in EVENTS.items():
-        if event['type'].lower() != event_type.lower():
-            continue
-
-        print(f"Processing event: {event['name']} ({event_key})")
-
-        market = event['index']
-        tickers = event['sector_etfs']
-        start_date = event['start_date']
-        end_date = event['end_date']
-        event_date = event['event_date']
-        lat = event['location']['lat']
-        lon = event['location']['lon']
-        disaster_type = event['type']
-
-        tickers_set.update(tickers)
-
-        # Get market data
-        try:
-            market_df = fetch_market_data([market], start_date, end_date)[market]
-            sector_dict = fetch_market_data(tickers, start_date, end_date)
-        except Exception as e:
-            print(f"Failed to fetch market data for {event_key}: {e}")
-            continue
-
-        estimation_window = market_df.index[market_df.index < event_date][-30:]
-
-        # Compute market model parameters and abnormal returns
-        try:
-            model_params = estimate_market_model(market_df, sector_dict, estimation_window)
-            save_market_model_params(model_params, event_type, 'models/cross')
-            abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
-            ar_by_event[event_key] = abnormal_returns
-        except Exception as e:
-            print(f"Modeling error for {event_key}: {e}")
-            traceback.print_exc()
-            continue
-
-        # Store ARs with relative day index
-        rel_ar_dict = {}
-        for ticker, series in abnormal_returns.items():
-            relative_idx = (series.index - pd.to_datetime(event_date)).days
-            series.index = relative_idx
-            rel_ar_dict[ticker] = series
-        ar_by_event[event_key] = rel_ar_dict
-
-        # Get weather data and align to relative days
-        weather_df = fetch_visualcrossing_weather(api_key, lat, lon, start_date, end_date, disaster_type)
-
-        relative_days = (weather_df.index - pd.to_datetime(event_date)).days
-        weather_df['relative_day'] = relative_days
-        weather_df.set_index('relative_day', inplace=True)
-        weather_by_event[event_key] = weather_df
-
-
-    # Compute average abnormal return
-    aar_dict = {}
-    for ticker in tickers_set:
-        ar_series_list = []
-        for rel_ar in ar_by_event.values():
-            if ticker in rel_ar:
-                ar_series_list.append(rel_ar[ticker])
-        if ar_series_list:
-            aar_dict[ticker] = pd.concat(ar_series_list, axis=1).mean(axis=1)
-
-    # Compute comulative average abnormal return
-    caar_dict = {ticker: aar.cumsum() for ticker, aar in aar_dict.items()}
-    print(f"\nComputed average abnormal returns and CAAR for {event_type} events.\n")
-
-    # Compute average weather
-    avg_weather_df = pd.DataFrame()
-    for event_weather in weather_by_event.values():
-        avg_weather_df = avg_weather_df.add(event_weather, fill_value=0)
-    if not weather_by_event:
-        print("No weather data to average. Exiting.")
-        return
-    avg_weather_df /= len(weather_by_event)
-    print(f"\nComputed average weather for {event_type} events.\n")
-
-
-    for ticker, aar_series in aar_dict.items():
-        try:
-            merged_df = pd.concat([aar_series.rename('abnormal_return'), avg_weather_df], axis=1).dropna()
-
-            # Save merged data for tabular regression
-            tabular_data_dir = f"../data/aar_weather_dfs/{event_type}"
-            os.makedirs(tabular_data_dir, exist_ok=True)
-            merged_df.to_csv(os.path.join(tabular_data_dir, f"{ticker}_aar_weather.csv"))
-
-            features = EVENT_FEATURES.get(disaster_type, ['temp', 'humidity', 'precip', 'windspeed', 'pressure'])
-            target = 'abnormal_return'
-
-            results_xgb = train_xgboost_model(merged_df, features, target)
-            results_lstm = train_lstm_model(merged_df, features, target)
-
-            rmse_lstm = results_lstm["metrics"]["rmse"],
-            mae_lstm = results_lstm["metrics"]["mae"],
-            r2_lstm = results_lstm["metrics"]["r2"]
-            rmse_xgb = results_xgb["metrics"]["rmse"],
-            mae_xgb = results_xgb["metrics"]["mae"],
-            r2_xgb = results_xgb["metrics"]["r2"]
-
-            # Save metrics to CSV
-            metrics_dir = "metrics/cross"
-            os.makedirs(metrics_dir, exist_ok=True)
-            save_metrics_csv(
-                metrics_dir + "/metrics_" + ticker + "_" + event_type + ".csv",
-                [event_key, ticker, "LSTM", f"{rmse_lstm:.4f}", f"{mae_lstm:.4f}", f"{r2_lstm:.4f}", f"{mape_lstm:.4f}", f"{max_err_lstm:.4f}"],
-                header=["event_key", "ticker", "lstm_model", "rmse_lstm", "mae_lstm", "r2_lstm", "mape_lstm", "max_err_lstm"]
-            )
-            save_metrics_csv(
-                metrics_dir + "/metrics_" + ticker + "_" + event_type + ".csv",
-                [event_key, ticker, "XGBoost", f"{rmse_xgb:.4f}", f"{mae_xgb:.4f}", f"{r2_xgb:.4f}", f"{mape_xgb:.4f}", f"{max_err_xgb:.4f}"],
-                header=["event_key", "ticker", "xgb_model", "rmse_xgb", "mae_xgb", "r2_xgb", "mape_xgb", "max_err_xgb"]
-            )
-
-            # Save models
-            model_dir = "models/cross"
-            os.makedirs(model_dir, exist_ok=True)
-            model_path = os.path.join(model_dir, f"{event_type}_{ticker}_xgb.pkl")
+        for model_name, model in final_models.items():
+            model_path = os.path.join(model_dir, f"{sector}_{model_name}.pkl")
             with open(model_path, "wb") as f:
-                pickle.dump(results_xgb["model"], f)
-            model_path = os.path.join(model_dir, f"{event_type}_{ticker}_lstm.keras")
-            results_lstm["model"].save(model_path)
+                pickle.dump(model, f)
 
-            # Save training plots
-            training_dir = "plots/training/cross"
-            os.makedirs(training_dir, exist_ok=True)
-            plot_training_history(results_xgb["history"], "xgboost", ticker, event_type, save_dir=training_dir)
-            plot_training_history(results_lstm["history"], "lstm", ticker, event_type, save_dir=training_dir)
+        # Plots
+        plots_dir = os.path.join(output_dir, "plots")
+        os.makedirs(plots_dir, exist_ok=True)
 
-            # Save truth and predictions
-            results_xgb_train = pd.DataFrame({
-                'ar_true': results_xgb["train"]["y_true"],
-                'ar_pred': results_xgb["train"]["y_pred"],
-                'car_true': np.cumsum(results_xgb["train"]["y_true"]),
-                'car_pred': np.cumsum(results_xgb["train"]["y_pred"]),
-            }, index=results_xgb["train"]["index"])
-            results_xgb_test = pd.DataFrame({
-                'ar_true': results_xgb["test"]["y_true"],
-                'ar_pred': results_xgb["test"]["y_pred"],
-                'car_true': np.cumsum(results_xgb["test"]["y_true"]),
-                'car_pred': np.cumsum(results_xgb["test"]["y_pred"]),
-            }, index=results_xgb["test"]["index"])
-            results_xgb_train.to_csv(f"{training_dir}/{event_type}_{ticker}_xgb_train_ar_car.csv")
-            results_xgb_test.to_csv(f"{training_dir}/{event_type}_{ticker}_xgb_test_ar_car.csv")
-
-            results_lstm_train = pd.DataFrame({
-                'ar_true': results_lstm["train"]["y_true"],
-                'ar_pred': results_lstm["train"]["y_pred"],
-                'car_true': np.cumsum(results_lstm["train"]["y_true"]),
-                'car_pred': np.cumsum(results_lstm["train"]["y_pred"]),
-            }, index=results_lstm["train"]["index"])
-            results_lstm_test = pd.DataFrame({
-                'ar_true': results_lstm["test"]["y_true"],
-                'ar_pred': results_lstm["test"]["y_pred"],
-                'car_true': np.cumsum(results_lstm["test"]["y_true"]),
-                'car_pred': np.cumsum(results_lstm["test"]["y_pred"]),
-            }, index=results_lstm["test"]["index"])
-            results_lstm_train.to_csv(f"{training_dir}/{event_type}_{ticker}_lstm_train_ar_car.csv")        
-            results_lstm_test.to_csv(f"{training_dir}/{event_type}_{ticker}_lstm_test_ar_car.csv")
-
-            # Plot test set
-            plot_predictions_separately(
-                results_lstm["test"]["index"], results_lstm["test"]["y_true"], results_lstm["test"]["y_pred"],
-                results_xgb["test"]["index"], results_xgb["test"]["y_true"], results_xgb["test"]["y_pred"],            
-                ticker, event_type, save_dir="plots/test/cross"
+        # Scatter plots (actual vs predicted) for XGBoost and RF
+        all_true = np.concatenate([f['y_true'] for f in fold_results])
+        for model_name in ['xgboost', 'random_forest']:
+            all_pred = np.concatenate([f[f'y_pred_{model_name}'] for f in fold_results])
+            plot_actual_vs_predicted(
+                all_true, all_pred, model_name, sector, event_type, plots_dir
             )
 
-            print(f"Saved predictions for {ticker} | RMSE XGB: {rmse_xgb:.4f}, LSTM: {rmse_lstm:.4f}")
-            
-        except Exception as e:
-            print(f"Error processing {ticker} for {event_type}: {e}")
-            traceback.print_exc()
-            continue
+        # Feature importance (XGBoost)
+        if 'xgboost' in final_models:
+            plot_feature_importance(
+                final_models['xgboost'], features_to_use, sector, event_type, plots_dir
+            )
 
-    print(f"\nFinished cross-event analysis for {event_type} events.\n")
+        # CAR by event
+        plot_car_by_event(preds_df, sector, event_type, plots_dir)
+
+    # Cross-model summary plot
+    if all_sector_metrics:
+        summary_df = pd.DataFrame(all_sector_metrics)
+        plots_dir = os.path.join(output_dir, "plots")
+        plot_cv_metrics_summary(summary_df, event_type, plots_dir)
+
+    print(f"\n{'='*60}")
+    print(f"Analysis complete for {event_type}. Outputs in {output_dir}/")
+    print(f"{'='*60}")
