@@ -28,4 +28,16 @@ def fetch_visualcrossing_weather(api_key, lat, lon, start_date, end_date, disast
     # Only return relevant columns that exist in the DataFrame
     available_vars = [var for var in weather_vars if var in df.columns]
     return df[available_vars]
-  
+
+
+def compute_weather_deltas(weather_df, baseline_end_date):
+    """
+    Compute weather deltas: deviation from pre-event baseline.
+    Baseline = mean of all weather values before baseline_end_date (the event_date).
+
+    Returns DataFrame with same shape, columns prefixed with 'delta_'.
+    """
+    baseline = weather_df.loc[weather_df.index < baseline_end_date].mean()
+    delta_df = weather_df.subtract(baseline)
+    delta_df.columns = [f"delta_{col}" for col in delta_df.columns]
+    return delta_df
