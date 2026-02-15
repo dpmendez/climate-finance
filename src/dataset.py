@@ -2,6 +2,7 @@ import os
 import sys
 import pandas as pd
 import traceback
+from datetime import timedelta
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
@@ -22,31 +23,42 @@ def build_event_observation(event_key, api_key):
 
     market = event['index']
     tickers = event['sector_etfs']
-    start_date = event['start_date']
     end_date = event['end_date']
     event_date = event['event_date']
     lat = event['location']['lat']
     lon = event['location']['lon']
     disaster_type = event['type']
 
-    # Fetch market and sector data
-    market_df = fetch_market_data([market], start_date, end_date)[market]
-    sector_dict = fetch_market_data(tickers, start_date, end_date)
+    # Derive analysis window start from event type defaults
+    pre_event_days = EVENT_TYPE_DEFAULTS[disaster_type]['pre_event_days']
+    event_dt = pd.to_datetime(event_date)
+    analysis_start = (event_dt - timedelta(days=pre_event_days)).strftime('%Y-%m-%d')
 
-    # Estimate market model on pre-event window
-    estimation_window = market_df.index[market_df.index < event_date][-30:]
+    # Go back far enough to cover ESTIMATION_DAYS trading days (~1.5x calendar days)
+    estimation_start = (event_dt - timedelta(days=int(ESTIMATION_DAYS * 1.5))).strftime('%Y-%m-%d')
+
+    # Fetch market and sector data from estimation_start (wide window for CAPM fitting)
+    market_df = fetch_market_data([market], estimation_start, end_date)[market]
+    sector_dict = fetch_market_data(tickers, estimation_start, end_date)
+
+    # Estimate market model on pre-event window using ESTIMATION_DAYS trading days
+    estimation_window = market_df.index[market_df.index < event_date][-ESTIMATION_DAYS:]
     model_params = estimate_market_model(market_df, sector_dict, estimation_window)
 
-    # Compute abnormal returns
+    # Compute abnormal returns over the full fetched range
     abnormal_returns = compute_abnormal_returns(market_df, sector_dict, model_params)
 
-    # Fetch weather and compute deltas
-    weather_df = fetch_visualcrossing_weather(api_key, lat, lon, start_date, end_date, disaster_type)
+    # Fetch weather for the analysis window only (analysis_start to end_date)
+    weather_df = fetch_visualcrossing_weather(api_key, lat, lon, analysis_start, end_date, disaster_type)
     delta_weather_df = compute_weather_deltas(weather_df, event_date)
 
-    # Align on common trading dates
+    # Align on common trading dates within the analysis window
+    analysis_start_dt = pd.to_datetime(analysis_start)
+    analysis_end_dt = pd.to_datetime(end_date)
+
     first_sector = list(abnormal_returns.keys())[0]
     common_index = abnormal_returns[first_sector].index
+    common_index = common_index[(common_index >= analysis_start_dt) & (common_index <= analysis_end_dt)]
     for ar_series in abnormal_returns.values():
         common_index = common_index.intersection(ar_series.index)
     common_index = common_index.intersection(delta_weather_df.index)
