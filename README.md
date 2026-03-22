@@ -6,7 +6,10 @@ This project provides a modular and extensible **event study** framework to anal
 
 The initial goal was to **quantify and forecast abnormal stock returns** in response to these events using historical market and weather data, with both classical (CAPM-style) and machine learning (XGBoost and LSTM) models.
 
-In this branch, the codebase has been **refactored for better structure, output organization, and preparation for a new modeling approach** (tabular regression). While the current event study implementation works, it produces **small test datasets** for some events due to limited aligned weather–market data, which restricts predictive insight.
+The approach uses **tabular regression** to pool observations across multiple events. Each row in the dataset represents one (event, sector, day) tuple, with weather deviation features and abnormal returns computed via a CAPM market model. Models are evaluated using **leave-one-event-out cross-validation (LOEO CV)**, where each fold holds out one event entirely — training on the rest and predicting on the held-out event.
+
+NOTE:
+The codebase was **refactored for better structure, output organization, and preparation for the tabular regression modeling approach**. While the previous event study implementation worked, it produced **small test datasets** for some events due to limited aligned weather–market data, which restricted predictive insight.
 
 ---
 
@@ -23,42 +26,35 @@ In this branch, the codebase has been **refactored for better structure, output 
 
 ### 📂 Modules Implemented
 
-| Module        | Description                                                                                                                       |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `events.py`   | Contains metadata for historical and combined disaster events. Supports flexible grouping by disaster type (e.g. all hurricanes). |
-| `weather.py`  | Fetches weather variables from Visual Crossing API based on disaster location and window. Tailors variables to event type.        |
-| `market.py`   | Downloads market and sector ETF data using `yfinance`. Cleans and aligns price data across sectors.                               |
-| `returns.py`  | Computes abnormal and cumulative abnormal returns (CAR) using either naive or regression-based approaches.                        |
-| `models.py`   | Trains and evaluates forecasting models (XGBoost, LSTM) for sectoral returns using weather as input.                              |
-| `viz.py`      | Generates visualizations of stock prices, abnormal returns, CAR, model predictions, and feature importances.                      |
-| `analysis.py` | Main orchestrator: selects events, runs data pipeline, fits models, and produces outputs for single or combined events.           |
-| `tabular_regression.py` |	**New** — builds a unified dataset of weather + market features across events for regression modeling.                  |
+| Module | Description |
+| --- | --- |
+| `config/events.py` | Event metadata (dates, locations, sector ETFs) and feature config per disaster type. |
+| `src/weather.py` | Fetches weather variables from the Visual Crossing API; computes deviations from pre-event baseline. |
+| `src/market.py` | Downloads market and sector ETF data via `yfinance`. |
+| `src/returns.py` | Fits CAPM market model on estimation window; computes abnormal and cumulative abnormal returns. |
+| `src/dataset.py` | Builds a pooled tabular dataset across all events of a given type. |
+| `src/models.py` | Trains XGBoost, Random Forest, and OLS models with LOEO CV; computes evaluation metrics. |
+| `src/viz.py` | Generates scatter plots, feature importance charts, CAR trajectories, and metric summaries. |
+| `src/analysis.py` | Main orchestrator: builds the dataset, runs per-sector LOEO CV, and saves all outputs. |
 
 ---
 
-### 📂 Output Organization **(new)**
+### 📂 Outputs
 
-Outputs are now saved in dedicated folders with .gitkeep placeholders to keep structure without tracking generated files:
+Results are saved under `output/{event_type}/`:
 
-data/       # Raw and processed datasets
-metrics/    # Model evaluation metrics
-models/     # Saved trained models
-plots/      # Generated plots
-
-These folders are tracked empty in Git via .gitkeep and excluded from committing generated files with .gitignore.
-
----
-### 🔄 Key changes in this branch
-
-* Introduced tabular regression pipeline for multi-event, cross-sectional modeling.
-* Standardized output directory creation and file saving across scripts.
-* Cleaned up metric saving and model export logic.
-* Updated .gitignore to keep repo clean from large generated artifacts.
-* Tagged version to reflect the limitations of current event study results and prepare for next phase.
+```
+output/{event_type}/
+├── pooled_dataset.csv                        # Full feature + target dataset
+├── metrics/{sector}_cv_metrics.csv           # Per-model, per-fold evaluation metrics
+├── predictions/{sector}_cv_predictions.csv   # Actual vs. predicted AR and CAR
+├── models/{sector}_{model}.pkl               # Trained model artifacts
+└── plots/                                    # Scatter plots, feature importance, CAR trajectories
+```
 
 ---
 
-### ⚠️ Limitations of Current Event Study Approach
+### ⚠️ Limitations
 
 * Limited data points in some events after aligning weather and market data.
 * Small sample sizes in test sets (sometimes only a few dates) make prediction plots sparse.
