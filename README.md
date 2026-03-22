@@ -69,14 +69,22 @@ output/{event_type}/
 2. Choose an event (event_key) or group (event_type).
 3. Run:
 
-**Event Study Analysis**
 ```python
-python run_analysis.py --event_key helene_2024
+python run_analysis.py --event_type Hurricane
 ```
-or
-**Tabular Regression Analysis**
+
+Supported event types: `Hurricane`, `Wildfire`, `Flood`, `WinterStorm`.
+
+To run all event types:
+
 ```python
-python tabular_regression.py --event_type Hurricane
+python run_all_events.sh
+```
+
+To list all configured events:
+
+```python
+python list_events.py
 ```
 
 4. Outputs include:
